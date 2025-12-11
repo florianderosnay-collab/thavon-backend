@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Users, Settings, LogOut } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient"; 
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
@@ -12,6 +13,16 @@ const menuItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    // 1. Tell Supabase to kill the session
+    await supabase.auth.signOut();
+    
+    // 2. Force redirect to login
+    router.push("/login");
+    router.refresh(); // Clear any cached data
+  };
 
   return (
     <div className="w-64 bg-white border-r border-slate-200 h-screen flex flex-col fixed left-0 top-0">
@@ -46,7 +57,10 @@ export function Sidebar() {
 
       {/* FOOTER */}
       <div className="p-4 border-t border-slate-100">
-        <button className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg w-full transition-colors">
+        <button 
+          onClick={handleSignOut}
+          className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg w-full transition-colors text-left"
+        >
           <LogOut className="w-5 h-5" />
           Sign Out
         </button>
