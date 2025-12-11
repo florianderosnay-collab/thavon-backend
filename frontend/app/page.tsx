@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { supabase } from "@/lib/supabaseClient"; 
 import { 
@@ -21,26 +21,54 @@ const API_URL = "https://web-production-274e.up.railway.app";
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("Ready to hunt.");
+  const [status, setStatus] = useState("System Standby");
+  const [agency, setAgency] = useState<any>(null); // Store full agency data to check subscription
+
+  // 1. Fetch Agency Data on Load
+  useEffect(() => {
+    const checkAccess = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Get the link table
+        const { data: member } = await supabase
+            .from("agency_members")
+            .select("agency_id")
+            .eq("user_id", user.id)
+            .single();
+
+        if (member) {
+            // Fetch the FULL Agency details (including subscription_status)
+            const { data: agencyData } = await supabase
+                .from("agencies")
+                .select("*")
+                .eq("id", member.agency_id)
+                .single();
+            
+            setAgency(agencyData);
+        }
+    };
+    checkAccess();
+  }, []);
 
   const handleStartCampaign = async () => {
+    if (!agency) return;
+    
+    // --- THE GATEKEEPER ---
+    // If subscription is not active, stop them here.
+    if (agency.subscription_status !== 'active') {
+        alert("⚠️ Access Denied: You are on the Free Plan. Please upgrade to start hunting.");
+        return;
+    }
+
     setLoading(true);
     setStatus("Identifying Agency...");
     
     try {
-      // 1. Get the Agency ID of the logged-in user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not logged in");
-
-      const { data: member } = await supabase.from("agency_members").select("agency_id").eq("user_id", user.id).single();
-      if (!member) throw new Error("No Agency found for this user. Contact Support.");
-
-      // 2. Trigger the Campaign with the Agency ID
       setStatus("Initiating AI Agents...");
-      
-      // Pass the agency_id to the backend so it knows WHOSE leads to call
+      // Send the ID to Python so it knows who to call
       const response = await axios.post(`${API_URL}/start-campaign`, { 
-        agency_id: member.agency_id 
+        agency_id: agency.id 
       });
       
       setStatus(`Success: ${response.data.message}`);
@@ -50,6 +78,9 @@ export default function Dashboard() {
     }
     setLoading(false);
   };
+
+  // Helper to check if they paid
+  const isPro = agency?.subscription_status === 'active';
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
@@ -82,7 +113,9 @@ export default function Dashboard() {
           
           {/* LEFT: THE AI LAUNCHPAD */}
           <Card className="col-span-2 border-none shadow-xl shadow-slate-200/60 overflow-hidden bg-white">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-blue-500"></div>
+            {/* The colored bar turns GRAY if they haven't paid */}
+            <div className={`absolute top-0 left-0 w-full h-1 ${isPro ? "bg-gradient-to-r from-violet-500 to-blue-500" : "bg-slate-300"}`}></div>
+            
             <CardHeader className="pb-4">
               <div className="flex justify-between items-center">
                 <div>
@@ -91,9 +124,16 @@ export default function Dashboard() {
                     Deploy AI agents to cold call 'New' leads from the database.
                   </CardDescription>
                 </div>
-                <div className="bg-violet-50 text-violet-700 px-3 py-1 rounded-full text-xs font-bold border border-violet-100 flex items-center gap-2">
-                   <Activity className="w-3 h-3" /> AI READY
-                </div>
+                {/* Visual Indicator: AI READY vs LOCKED */}
+                {isPro ? (
+                    <div className="bg-violet-50 text-violet-700 px-3 py-1 rounded-full text-xs font-bold border border-violet-100 flex items-center gap-2">
+                        <Activity className="w-3 h-3" /> AI READY
+                    </div>
+                ) : (
+                    <div className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-xs font-bold border border-slate-200">
+                        LOCKED
+                    </div>
+                )}
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -101,31 +141,44 @@ export default function Dashboard() {
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
                 <div>
                    <p className="text-sm font-semibold text-slate-700">Target List: FSBO Luxembourg</p>
-                   <p className="text-xs text-slate-500 mt-1">50 leads pending dial • Script: <span className="text-violet-600 font-medium">Top Producer v2</span></p>
+                   {/* Show Status explicitly */}
+                   <p className="text-xs text-slate-500 mt-1">Status: <span className="font-medium uppercase">{agency?.subscription_status || "Checking..."}</span></p>
                 </div>
                 <div className="h-2 w-24 bg-slate-200 rounded-full overflow-hidden">
                    <div className="h-full bg-violet-500 w-1/3"></div>
                 </div>
               </div>
 
-              {/* THE ACTION BUTTON */}
+              {/* THE ACTION BUTTON (Conditional) */}
               <div className="flex flex-col gap-4">
-                <Button 
-                    onClick={handleStartCampaign} 
-                    disabled={loading}
-                    className="w-full h-14 text-lg font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
-                >
-                    {loading ? (
-                       <span className="animate-pulse">Initializing Neural Network...</span>
-                    ) : (
-                       <>
-                         <Play className="w-5 h-5 fill-current" /> START HUNTING
-                       </>
-                    )}
-                </Button>
+                {isPro ? (
+                    // IF PAID: Show the Start Button
+                    <Button 
+                        onClick={handleStartCampaign} 
+                        disabled={loading}
+                        className="w-full h-14 text-lg font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+                    >
+                        {loading ? (
+                        <span className="animate-pulse">Initializing Neural Network...</span>
+                        ) : (
+                        <>
+                            <Play className="w-5 h-5 fill-current" /> START HUNTING
+                        </>
+                        )}
+                    </Button>
+                ) : (
+                    // IF FREE: Show the Upgrade Button
+                    <Button 
+                        // IMPORTANT: Replace this link with your actual Stripe Link later
+                        onClick={() => window.open('YOUR_STRIPE_PAYMENT_LINK_HERE', '_blank')} 
+                        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg hover:opacity-90 transition-all active:scale-[0.99]"
+                    >
+                        🚀 UPGRADE TO PRO (€500/mo)
+                    </Button>
+                )}
                 
                 <p className={`text-center text-sm font-medium ${status.includes('Success') ? 'text-green-600' : 'text-slate-400'}`}>
-                   {status}
+                   {isPro ? status : "Upgrade required to launch campaigns."}
                 </p>
               </div>
             </CardContent>
