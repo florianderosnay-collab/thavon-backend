@@ -163,7 +163,7 @@ export default function LeadsPage() {
                                     </td>
                                     <td className="px-6 py-4 text-slate-500">{lead.address}</td>
                                     <td className="px-6 py-4 text-right">
-                                        <button onClick={() => deleteLead(lead.id)} className="text-slate-400 hover:text-red-600"><Trash2 className=\"w-4 h-4\" /></button>
+                                        <button onClick={() => deleteLead(lead.id)} className="text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                                     </td>
                                 </tr>
                             ))}
