@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Papa from "papaparse"; 
-import { Upload, FileUp, Check, AlertCircle, Download } from "lucide-react"; // Added Download icon
+import { Upload, FileUp, Check, AlertCircle, Download, Trash2 } from "lucide-react"; // Added Trash2
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -22,9 +22,20 @@ export default function LeadsPage() {
     if (data) setLeads(data);
   };
 
-  // --- NEW FUNCTION: DOWNLOAD TEMPLATE ---
+  // --- NEW: DELETE FUNCTION ---
+  const deleteLead = async (id: string) => {
+    // 1. Delete from Database
+    const { error } = await supabase.from("leads").delete().eq("id", id);
+    
+    if (error) {
+        console.error("Error deleting:", error);
+    } else {
+        // 2. Remove from UI instantly (Optimistic update)
+        setLeads(leads.filter(lead => lead.id !== id));
+    }
+  };
+
   const downloadTemplate = () => {
-    // This creates a correct CSV file in the browser
     const csvContent = "Name,Phone,Address,Price\nJohn Doe,+352691123456,10 Avenue Monterey,850000\nJane Smith,+352661000000,5 Rue du Marche,1200000";
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -39,7 +50,6 @@ export default function LeadsPage() {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Check if file is actually CSV
     if (file.type !== "text/csv" && !file.name.endsWith(".csv")) {
         setErrorMessage("Please upload a .csv file (not .xlsx). Use the template!");
         return;
@@ -54,7 +64,6 @@ export default function LeadsPage() {
       skipEmptyLines: true,
       complete: async (results) => {
         const rows = results.data;
-        console.log("Raw CSV Data:", rows);
         
         const formattedData = rows
           .map((row: any) => {
@@ -109,9 +118,7 @@ export default function LeadsPage() {
             <p className="text-slate-500">Import and manage your prospecting list.</p>
           </div>
           
-          {/* BUTTONS AREA */}
           <div className="flex gap-3">
-            {/* NEW BUTTON HERE */}
             <Button 
                 variant="outline" 
                 onClick={downloadTemplate}
@@ -135,7 +142,6 @@ export default function LeadsPage() {
           </div>
         </div>
 
-        {/* MESSAGES */}
         {errorMessage && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
             <AlertCircle className="w-5 h-5" />
@@ -162,6 +168,7 @@ export default function LeadsPage() {
                                 <th className="px-6 py-4">Phone</th>
                                 <th className="px-6 py-4">Status</th>
                                 <th className="px-6 py-4">Address</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -177,12 +184,22 @@ export default function LeadsPage() {
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 rounded-full text-xs font-medium 
                                             ${lead.status === 'new' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 
+                                              lead.status === 'dialing' ? 'bg-yellow-50 text-yellow-700 border border-yellow-100' :
                                               lead.status === 'called' ? 'bg-green-50 text-green-700 border border-green-100' : 
                                               'bg-slate-100 text-slate-600'}`}>
                                             {lead.status?.toUpperCase()}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-slate-500">{lead.address}</td>
+                                    {/* DELETE BUTTON */}
+                                    <td className="px-6 py-4 text-right">
+                                        <button 
+                                            onClick={() => deleteLead(lead.id)}
+                                            className="text-slate-400 hover:text-red-600 transition-colors"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
