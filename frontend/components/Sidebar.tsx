@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, Settings, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient"; 
+import { LayoutDashboard, Users, Settings, LogOut, Briefcase } from "lucide-react"; // Import Briefcase
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: Users, label: "Leads", href: "/leads" },
+  { icon: Briefcase, label: "Team", href: "/team" }, // NEW TAB
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
