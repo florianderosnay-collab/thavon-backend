@@ -11,6 +11,12 @@ load_dotenv()
 
 app = FastAPI()
 
+from pydantic import BaseModel
+
+class CampaignRequest(BaseModel):
+    agency_id: str
+
+
 # --- FIX CORS (ALLOW VERCEL TO TALK TO RAILWAY) ---
 app.add_middleware(
     CORSMiddleware,
@@ -248,19 +254,23 @@ async def tool_call(request: Request):
 # 3. THE TRIGGER (Outbound Campaign)
 # Call this endpoint to start calling 100 people
 @app.post("/start-campaign")
-async def start_campaign(background_tasks: BackgroundTasks):
+async def start_campaign(request: CampaignRequest, background_tasks: BackgroundTasks):
     """
-    Fetches all 'new' leads from Supabase and triggers calls via Vapi.
+    Fetches leads ONLY for the specific agency requesting the campaign.
     """
-    
-    # 1. Get Leads
-    response = supabase.table('leads').select("*").eq('status', 'new').limit(50).execute()
+    agency_id = request.agency_id
+    print(f"🚀 Starting campaign for Agency ID: {agency_id}")
+
+    # 1. Get Leads (Filtered by Agency ID)
+    # We add .eq('agency_id', agency_id) to ensure strict privacy
+    response = supabase.table('leads').select("*").eq('status', 'new').eq('agency_id', agency_id).limit(50).execute()
     leads = response.data
     
     if not leads:
-        return {"message": "No new leads to call."}
+        print("No leads found.")
+        return {"message": "No new leads found for your agency."}
 
-    # 2. Loop and Call (Background Task to not block server)
+    # 2. Loop and Call
     background_tasks.add_task(process_outbound_calls, leads)
     
     return {"message": f"Started calling {len(leads)} leads."}

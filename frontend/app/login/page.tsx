@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, Mail, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";

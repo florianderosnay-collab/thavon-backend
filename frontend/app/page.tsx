@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import axios from "axios";
+import { supabase } from "@/lib/supabaseClient"; 
 import { 
   Phone, 
   Users, 
@@ -24,13 +25,28 @@ export default function Dashboard() {
 
   const handleStartCampaign = async () => {
     setLoading(true);
-    setStatus("Initializing AI Agents...");
+    setStatus("Identifying Agency...");
+    
     try {
-      const response = await axios.post(`${API_URL}/start-campaign`);
+      // 1. Get the Agency ID of the logged-in user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not logged in");
+
+      const { data: member } = await supabase.from("agency_members").select("agency_id").eq("user_id", user.id).single();
+      if (!member) throw new Error("No Agency found for this user. Contact Support.");
+
+      // 2. Trigger the Campaign with the Agency ID
+      setStatus("Initiating AI Agents...");
+      
+      // Pass the agency_id to the backend so it knows WHOSE leads to call
+      const response = await axios.post(`${API_URL}/start-campaign`, { 
+        agency_id: member.agency_id 
+      });
+      
       setStatus(`Success: ${response.data.message}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setStatus("Error: Connection failed. Check backend.");
+      setStatus(`Error: ${error.message || "Connection failed"}`);
     }
     setLoading(false);
   };
@@ -41,23 +57,12 @@ export default function Dashboard() {
       {/* TOP NAVIGATION / HEADER */}
       <div className="max-w-6xl mx-auto mb-10 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          {/* Simulated Logo based on Thavon.io */}
           <div className="h-10 w-10 bg-gradient-to-br from-violet-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-200">
              <span className="text-white font-bold text-xl">T</span>
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">THAVON</h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">Agency Control Center</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-slate-600 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">
-            Luxembourg HQ
-          </span>
-          <div className="h-10 w-10 bg-slate-200 rounded-full border-2 border-white shadow-sm overflow-hidden">
-             {/* User Avatar Placeholder */}
-             <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
           </div>
         </div>
       </div>
@@ -156,12 +161,6 @@ export default function Dashboard() {
                   desc="'Bring me a buyer' -> Overcome"
                   type="neutral"
                 />
-                <TimelineItem 
-                  time="15 mins ago" 
-                  title="Campaign Started" 
-                  desc="Batch #402 initiated"
-                  type="system"
-                />
               </div>
             </CardContent>
           </Card>
@@ -210,4 +209,4 @@ function TimelineItem({ time, title, desc, type }: any) {
         </div>
       </div>
     );
-  }
+}
