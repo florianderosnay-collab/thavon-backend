@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import Papa from "papaparse"; // CSV Parser
-import { Upload, FileUp, Check, AlertCircle, Phone, User } from "lucide-react";
+import Papa from "papaparse"; 
+import { Upload, FileUp, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -11,56 +11,70 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // 1. Fetch Leads on Load
   useEffect(() => {
     fetchLeads();
   }, []);
 
   const fetchLeads = async () => {
-    // In real version, we filter by authenticated Agency ID
     const { data, error } = await supabase.from("leads").select("*").order('created_at', { ascending: false });
     if (data) setLeads(data);
   };
 
-  // 2. Handle CSV Upload
   const handleFileUpload = (event: any) => {
     const file = event.target.files[0];
     if (!file) return;
 
     setUploading(true);
     setUploadStatus("Parsing file...");
+    setErrorMessage("");
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
         const rows = results.data;
-        console.log("Parsed CSV:", rows);
+        console.log("Raw CSV Data:", rows);
         
-        setUploadStatus(`Uploading ${rows.length} contacts...`);
+        // 1. Map and Clean Data
+        const formattedData = rows
+          .map((row: any) => {
+            // Flexible matching for headers
+            const name = row.Name || row.name || row['First Name'];
+            const phone = row.Phone || row.phone || row.Mobile || row['Phone Number'];
+            
+            // Skip rows without phone numbers (Database requires them)
+            if (!phone) return null;
 
-        // Map CSV columns to Database columns
-        // Expects CSV headers: Name, Phone, Address, Price
-        const formattedData = rows.map((row: any) => ({
-          name: row.Name || row.name || "Unknown",
-          phone_number: row.Phone || row.phone || row.phone_number,
-          address: row.Address || row.address || "",
-          asking_price: row.Price || row.price || "",
-          status: 'new',
-          // HARDCODED AGENCY ID FOR NOW - We fix this with Auth next
-          // agency_id: 'YOUR_AGENCY_ID_FROM_SUPABASE' 
-        }));
+            return {
+              name: name || "Unknown Lead",
+              phone_number: phone.toString().trim(), // Ensure it's a string
+              address: row.Address || row.address || "",
+              asking_price: row.Price || row.price || "",
+              status: 'new',
+            };
+          })
+          .filter(Boolean); // Remove null rows
 
-        // Insert into Supabase
+        if (formattedData.length === 0) {
+          setErrorMessage("No valid phone numbers found. Check your CSV headers (Name, Phone, Address).");
+          setUploading(false);
+          return;
+        }
+
+        setUploadStatus(`Uploading ${formattedData.length} valid leads...`);
+
+        // 2. Insert into Supabase
         const { error } = await supabase.from("leads").insert(formattedData);
 
         if (error) {
-          console.error(error);
-          setUploadStatus("Error uploading.");
+          console.error("Supabase Error:", error);
+          setErrorMessage(`Database rejected data: ${error.message} (Code: ${error.code})`);
+          setUploadStatus("");
         } else {
-          setUploadStatus("Success!");
-          fetchLeads(); // Refresh list
+          setUploadStatus("Success! Database updated.");
+          fetchLeads(); // Refresh table
         }
         setUploading(false);
       },
@@ -70,15 +84,11 @@ export default function LeadsPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-6xl mx-auto">
-        
-        {/* HEADER */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Lead Management</h1>
             <p className="text-slate-500">Import and manage your prospecting list.</p>
           </div>
-          
-          {/* UPLOAD BUTTON WRAPPER */}
           <div className="relative">
             <input 
               type="file" 
@@ -86,22 +96,27 @@ export default function LeadsPage() {
               onChange={handleFileUpload} 
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
-            <Button className="bg-violet-600 hover:bg-violet-700 text-white gap-2 pl-4 pr-6">
+            <Button className="bg-violet-600 hover:bg-violet-700 text-white gap-2">
               {uploading ? <FileUp className="animate-bounce w-4 h-4" /> : <Upload className="w-4 h-4" />}
-              {uploading ? "Importing..." : "Import CSV"}
+              {uploading ? "Uploading..." : "Import CSV"}
             </Button>
           </div>
         </div>
 
-        {/* STATUS BAR */}
-        {uploadStatus && (
-          <div className="mb-6 p-4 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center gap-2 text-sm font-medium text-slate-700">
-            <Check className="w-4 h-4 text-green-500" />
+        {/* ERROR / SUCCESS MESSAGES */}
+        {errorMessage && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+            <AlertCircle className="w-5 h-5" />
+            {errorMessage}
+          </div>
+        )}
+        {uploadStatus && !errorMessage && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
+            <Check className="w-5 h-5" />
             {uploadStatus}
           </div>
         )}
 
-        {/* DATA TABLE (Simple Version) */}
         <Card className="border-none shadow-sm">
             <CardHeader className="bg-white border-b border-slate-100 rounded-t-xl">
                 <CardTitle className="text-lg">All Contacts ({leads.length})</CardTitle>
@@ -130,9 +145,8 @@ export default function LeadsPage() {
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 rounded-full text-xs font-medium 
                                             ${lead.status === 'new' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 
-                                              lead.status === 'called' ? 'bg-green-50 text-green-700 border border-green-100' : 
                                               'bg-slate-100 text-slate-600'}`}>
-                                            {lead.status.toUpperCase()}
+                                            {lead.status?.toUpperCase()}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-slate-500">{lead.address}</td>
