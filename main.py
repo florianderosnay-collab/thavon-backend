@@ -5,10 +5,21 @@ from fastapi import FastAPI, Request, BackgroundTasks
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from twilio.rest import Client as TwilioClient
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
 app = FastAPI()
+
+# --- FIX CORS (ALLOW VERCEL TO TALK TO RAILWAY) ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (Vercel, localhost, etc.)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 
 # --- CONFIGURATION ---
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
