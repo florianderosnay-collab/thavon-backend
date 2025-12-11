@@ -1,43 +1,34 @@
-# --- Python (Backend) ---
-__pycache__/
-*.py[cod]
-venv/
-.env
-
-# --- Node.js (Frontend) ---
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-frontend/build/
-frontend/.DS_Store
+# --- System Files (Mac) ---
 .DS_Store
+*.log
 
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
-
-# Testing
-coverage
-
-# Next.js build output
-.next/
-out/
-build/
-dist/
-
-# Environment variables (Keep secrets safe!)
+# --- Secrets (CRITICAL: Never upload these) ---
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+**/.env
 
-# System Files
-.DS_Store
-*.log
+# --- Python (Backend - Root) ---
 __pycache__/
 *.py[cod]
+*$py.class
 venv/
 .venv/
 env/
+
+# --- Node.js / Next.js (Frontend) ---
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+build/
+**/build/
+out/
+**/out/
+dist/
+**/dist/
+.pnp
+.pnp.js
+coverage/
