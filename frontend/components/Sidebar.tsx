@@ -4,11 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient"; 
 import { LayoutDashboard, Users, Settings, LogOut, Briefcase } from "lucide-react"; // Import Briefcase
+import { Link as LinkIcon } from "lucide-react"; // Import icon
+
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: Users, label: "Leads", href: "/leads" },
   { icon: Briefcase, label: "Team", href: "/team" }, // NEW TAB
+  { icon: LinkIcon, label: "Integrations", href: "/integrations" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
