@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS agency_integrations (
   status TEXT NOT NULL DEFAULT 'disconnected', -- 'connected', 'disconnected', 'error'
   connected_at TIMESTAMPTZ,
   last_tested_at TIMESTAMPTZ,
-  last_synced_at TIMESTAMPTZ, -- Last successful sync time
+  last_synced_at TIMESTAMPTZ, -- Last time leads were synced from this integration
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(agency_id, integration_id)

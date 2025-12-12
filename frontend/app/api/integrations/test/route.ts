@@ -47,9 +47,10 @@ export async function POST(req: Request) {
 
     if (integration.provider === "hubspot") {
       try {
-        const testResponse = await fetch("https://api.hubapi.com/contacts/v1/lists/all/contacts/all?count=1", {
+        const testResponse = await fetch("https://api.hubapi.com/crm/v3/objects/contacts?limit=1", {
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
         });
         testResult.connected = testResponse.ok;
@@ -63,9 +64,10 @@ export async function POST(req: Request) {
       try {
         // Get instance URL from token response or metadata
         const instanceUrl = integration.metadata?.instance_url || "https://login.salesforce.com";
-        const testResponse = await fetch(`${instanceUrl}/services/data/v57.0/sobjects/Contact/describe`, {
+        const testResponse = await fetch(`${instanceUrl}/services/data/v57.0/sobjects/Lead/describe`, {
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
         });
         testResult.connected = testResponse.ok;

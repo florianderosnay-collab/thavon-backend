@@ -12,8 +12,8 @@ interface Lead {
   phone: string;
   address?: string;
   email?: string;
-  asking_price?: string;
-  source?: string;
+  source: string;
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -40,21 +40,26 @@ async function fetchHubSpotLeads(accessToken: string, agencyId: string): Promise
     const leads: Lead[] = [];
 
     for (const contact of data.results || []) {
-      const properties = contact.properties || {};
-      const firstName = properties.firstname || "";
-      const lastName = properties.lastname || "";
-      const phone = properties.phone || properties.mobilephone || "";
-      const email = properties.email || "";
-      const address = properties.address || "";
+      const props = contact.properties || {};
+      const firstName = props.firstname || "";
+      const lastName = props.lastname || "";
+      const name = `${firstName} ${lastName}`.trim() || "Unknown";
+      const phone = props.phone || "";
+      const email = props.email || "";
+      const address = props.address || "";
 
       if (phone) {
         leads.push({
-          name: `${firstName} ${lastName}`.trim() || "Unknown",
-          phone: phone.replace(/\D/g, ""), // Remove non-digits
-          address: address,
-          email: email,
-          asking_price: "0",
+          name,
+          phone,
+          address,
+          email,
           source: "hubspot",
+        metadata: {
+          hubspot_contact_id: contact.id,
+          created_at: contact.createdAt,
+          properties: props,
+        },
         });
       }
     }
@@ -76,7 +81,7 @@ async function fetchSalesforceLeads(
 ): Promise<Lead[]> {
   try {
     // Query Salesforce for Leads
-    const query = `SELECT Id, FirstName, LastName, Phone, Email, Address, Price__c FROM Lead WHERE Phone != null LIMIT 100`;
+    const query = "SELECT Id, FirstName, LastName, Phone, Email, Address, CreatedDate FROM Lead WHERE Phone != null LIMIT 100";
     const encodedQuery = encodeURIComponent(query);
 
     const response = await fetch(
@@ -96,22 +101,25 @@ async function fetchSalesforceLeads(
     const data = await response.json();
     const leads: Lead[] = [];
 
-    for (const record of data.records || []) {
-      const firstName = record.FirstName || "";
-      const lastName = record.LastName || "";
-      const phone = record.Phone || "";
-      const email = record.Email || "";
-      const address = record.Address || "";
-      const price = record.Price__c || "0";
+    for (const lead of data.records || []) {
+      const firstName = lead.FirstName || "";
+      const lastName = lead.LastName || "";
+      const name = `${firstName} ${lastName}`.trim() || "Unknown";
+      const phone = lead.Phone || "";
+      const email = lead.Email || "";
+      const address = lead.Address ? `${lead.Address.street || ""} ${lead.Address.city || ""} ${lead.Address.state || ""}`.trim() : "";
 
       if (phone) {
         leads.push({
-          name: `${firstName} ${lastName}`.trim() || "Unknown",
-          phone: phone.replace(/\D/g, ""), // Remove non-digits
-          address: address,
-          email: email,
-          asking_price: price.toString(),
+          name,
+          phone,
+          address,
+          email,
           source: "salesforce",
+          metadata: {
+            salesforce_lead_id: lead.Id,
+            created_at: lead.CreatedDate,
+          },
         });
       }
     }
@@ -124,43 +132,38 @@ async function fetchSalesforceLeads(
 }
 
 /**
- * Saves leads to database, avoiding duplicates
+ * Saves leads to database
  */
-async function saveLeads(leads: Lead[], agencyId: string): Promise<{ saved: number; skipped: number }> {
-  let saved = 0;
-  let skipped = 0;
+async function saveLeadsToDatabase(leads: Lead[], agencyId: string): Promise<number> {
+  if (leads.length === 0) return 0;
 
-  for (const lead of leads) {
-    // Check if lead already exists (by phone number)
-    const { data: existing } = await supabaseAdmin
-      .from("leads")
-      .select("id")
-      .eq("agency_id", agencyId)
-      .eq("phone_number", lead.phone)
-      .single();
+  const leadData = leads.map((lead) => ({
+    agency_id: agencyId,
+    name: lead.name,
+    phone_number: lead.phone,
+    address: lead.address || "",
+    email: lead.email || null,
+    status: "new",
+    asking_price: "0",
+    source: lead.source,
+    metadata: lead.metadata || {},
+  }));
 
-    if (existing) {
-      skipped++;
-      continue;
-    }
+  // Use upsert to avoid duplicates (based on phone_number + agency_id)
+  const { data, error } = await supabaseAdmin
+    .from("leads")
+    .upsert(leadData, {
+      onConflict: "agency_id,phone_number",
+      ignoreDuplicates: false,
+    })
+    .select();
 
-    // Insert new lead
-    const { error } = await supabaseAdmin.from("leads").insert({
-      agency_id: agencyId,
-      name: lead.name,
-      phone_number: lead.phone,
-      address: lead.address || "",
-      asking_price: lead.asking_price || "0",
-      status: "new",
-      source: lead.source || "integration",
-    });
-
-    if (!error) {
-      saved++;
-    }
+  if (error) {
+    console.error("Error saving leads:", error);
+    throw error;
   }
 
-  return { saved, skipped };
+  return data?.length || 0;
 }
 
 export async function POST(req: Request) {
@@ -201,30 +204,38 @@ export async function POST(req: Request) {
     const expiresAt = integration.expires_at ? new Date(integration.expires_at) : null;
     
     if (expiresAt && expiresAt < now) {
-      // Token expired - try to refresh
-      const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/integrations/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ integrationId, agencyId }),
-      });
-      
-      if (!refreshResponse.ok) {
+      // Token expired, try to refresh
+      try {
+        const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/integrations/refresh-token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ integrationId, agencyId }),
+        });
+        
+        if (!refreshResponse.ok) {
+          return NextResponse.json(
+            { error: "Token expired and refresh failed. Please reconnect the integration." },
+            { status: 401 }
+          );
+        }
+        
+        // Re-fetch integration with new token
+        const { data: refreshedIntegration } = await supabaseAdmin
+          .from("agency_integrations")
+          .select("*")
+          .eq("agency_id", agencyId)
+          .eq("integration_id", integrationId)
+          .single();
+        
+        if (refreshedIntegration) {
+          Object.assign(integration, refreshedIntegration);
+        }
+      } catch (refreshError) {
+        console.error("Token refresh error:", refreshError);
         return NextResponse.json(
           { error: "Token expired and refresh failed. Please reconnect the integration." },
           { status: 401 }
         );
-      }
-      
-      // Re-fetch integration with new token
-      const { data: refreshedIntegration } = await supabaseAdmin
-        .from("agency_integrations")
-        .select("*")
-        .eq("agency_id", agencyId)
-        .eq("integration_id", integrationId)
-        .single();
-      
-      if (refreshedIntegration) {
-        integration = refreshedIntegration;
       }
     }
 
@@ -237,54 +248,76 @@ export async function POST(req: Request) {
       );
     }
 
-    let leads: Lead[] = [];
-
     // Fetch leads based on provider
-    if (integration.provider === "hubspot") {
-      leads = await fetchHubSpotLeads(accessToken, agencyId);
-    } else if (integration.provider === "salesforce") {
-      const instanceUrl = integration.metadata?.instance_url || "https://login.salesforce.com";
-      leads = await fetchSalesforceLeads(accessToken, instanceUrl, agencyId);
-    } else {
-      return NextResponse.json(
-        { error: "Sync not supported for this integration type" },
-        { status: 400 }
-      );
+    let leads: Lead[] = [];
+    let syncError: string | null = null;
+
+    try {
+      if (integration.provider === "hubspot") {
+        leads = await fetchHubSpotLeads(accessToken, agencyId);
+      } else if (integration.provider === "salesforce") {
+        const instanceUrl = integration.metadata?.instance_url || "https://login.salesforce.com";
+        leads = await fetchSalesforceLeads(accessToken, instanceUrl, agencyId);
+      } else {
+        return NextResponse.json(
+          { error: "Sync not supported for this integration type" },
+          { status: 400 }
+        );
+      }
+    } catch (error: any) {
+      syncError = error.message;
+      console.error("Sync error:", error);
     }
 
     // Save leads to database
-    const { saved, skipped } = await saveLeads(leads, agencyId);
+    let savedCount = 0;
+    if (leads.length > 0 && !syncError) {
+      try {
+        savedCount = await saveLeadsToDatabase(leads, agencyId);
+      } catch (error: any) {
+        syncError = error.message;
+      }
+    }
 
-    // Update last sync time
+    // Update last sync timestamp
     await supabaseAdmin
       .from("agency_integrations")
       .update({
         last_synced_at: new Date().toISOString(),
         metadata: {
           ...integration.metadata,
-          last_sync_count: saved,
-          last_sync_skipped: skipped,
+          last_sync_count: savedCount,
+          last_sync_error: syncError || null,
         },
       })
       .eq("agency_id", agencyId)
       .eq("integration_id", integrationId);
 
+    if (syncError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: syncError,
+          leadsFound: leads.length,
+          leadsSaved: savedCount,
+          leadsSkipped: leads.length - savedCount,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       leadsFound: leads.length,
-      leadsSaved: saved,
-      leadsSkipped: skipped,
-      message: `Synced ${saved} new leads from ${integration.name}`,
+      leadsSaved: savedCount,
+      leadsSkipped: leads.length - savedCount,
+      message: `Successfully synced ${savedCount} leads from ${integrationId}`,
     });
   } catch (error: any) {
     console.error("Sync error:", error);
     return NextResponse.json(
-      {
-        error: error.message || "Sync failed",
-        success: false,
-      },
+      { error: error.message || "Internal server error" },
       { status: 500 }
     );
   }
 }
-

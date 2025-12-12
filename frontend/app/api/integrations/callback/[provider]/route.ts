@@ -97,7 +97,8 @@ export async function GET(
         metadata: {
           token_type: tokenData.token_type,
           scope: tokenData.scope,
-          instance_url: tokenData.instance_url || (provider === "salesforce" ? "https://login.salesforce.com" : null),
+          // Salesforce returns instance_url in token response
+          instance_url: tokenData.instance_url || (provider === "salesforce" ? tokenData.instance_url : null),
         },
         status: "connected",
         connected_at: new Date().toISOString(),

@@ -285,7 +285,7 @@ export default function IntegrationsPage() {
   const handleSync = async (integrationId: string) => {
     if (!agencyId) return;
     
-    if (!confirm(`Sync leads from ${integrationId}? This may take a few moments.`)) {
+    if (!confirm(`Sync leads from ${integrationId}? This will import new contacts into your leads database.`)) {
       return;
     }
     

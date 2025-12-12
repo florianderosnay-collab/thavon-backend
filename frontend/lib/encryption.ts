@@ -1,102 +1,121 @@
 import crypto from "crypto";
 
-// Encryption key - MUST be set in environment variables
-// Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
-const ALGORITHM = "aes-256-gcm";
+/**
+ * Encryption utility for storing sensitive credentials
+ * Uses AES-256-GCM for authenticated encryption
+ */
 
-if (!ENCRYPTION_KEY) {
-  console.warn("⚠️ ENCRYPTION_KEY not set. Tokens will not be encrypted properly.");
+const ALGORITHM = "aes-256-gcm";
+const IV_LENGTH = 16; // 16 bytes for AES
+const SALT_LENGTH = 64; // 64 bytes for key derivation
+const TAG_LENGTH = 16; // 16 bytes for GCM auth tag
+const KEY_LENGTH = 32; // 32 bytes for AES-256
+
+/**
+ * Derives an encryption key from the master key and salt
+ */
+function deriveKey(masterKey: string, salt: Buffer): Buffer {
+  return crypto.pbkdf2Sync(masterKey, salt, 100000, KEY_LENGTH, "sha256");
 }
 
 /**
- * Encrypts sensitive data (OAuth tokens, API keys)
+ * Encrypts a value using AES-256-GCM
  */
-export function encrypt(text: string): string {
-  if (!ENCRYPTION_KEY) {
-    // Fallback: return plain text with warning (NOT SECURE - for development only)
-    console.warn("⚠️ Encryption key not set. Storing plain text (INSECURE!)");
-    return text;
-  }
+export function encrypt(value: string): string {
+  if (!value) return value;
   
+  const masterKey = process.env.ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!masterKey) {
+    console.warn("⚠️ ENCRYPTION_KEY not set, storing in plain text (NOT RECOMMENDED FOR PRODUCTION)");
+    return value; // Fallback to plain text if no key
+  }
+
   try {
-    const key = Buffer.from(ENCRYPTION_KEY, "hex");
-    if (key.length !== 32) {
-      throw new Error("Encryption key must be 32 bytes (64 hex characters)");
-    }
+    // Generate random salt and IV
+    const salt = crypto.randomBytes(SALT_LENGTH);
+    const iv = crypto.randomBytes(IV_LENGTH);
     
-    const iv = crypto.randomBytes(16);
+    // Derive key from master key and salt
+    const key = deriveKey(masterKey, salt);
+    
+    // Create cipher
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
     
-    let encrypted = cipher.update(text, "utf8", "hex");
+    // Encrypt
+    let encrypted = cipher.update(value, "utf8", "hex");
     encrypted += cipher.final("hex");
     
-    const authTag = cipher.getAuthTag();
+    // Get auth tag
+    const tag = cipher.getAuthTag();
     
-    // Return iv:authTag:encrypted
-    return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
+    // Combine: salt + iv + tag + encrypted
+    const combined = Buffer.concat([
+      salt,
+      iv,
+      tag,
+      Buffer.from(encrypted, "hex")
+    ]);
+    
+    return combined.toString("base64");
   } catch (error) {
     console.error("Encryption error:", error);
-    throw new Error("Failed to encrypt data");
+    throw new Error("Failed to encrypt value");
   }
 }
 
 /**
- * Decrypts sensitive data
+ * Safe encrypt - handles null/undefined values
  */
-export function decrypt(encryptedData: string): string {
-  if (!ENCRYPTION_KEY) {
-    // Fallback: assume plain text (for development)
-    return encryptedData;
-  }
+export function safeEncrypt(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return encrypt(value);
+}
+
+/**
+ * Safe decrypt - handles null/undefined values
+ */
+export function safeDecrypt(encryptedValue: string | null | undefined): string | null {
+  if (!encryptedValue) return null;
+  return decrypt(encryptedValue);
+}
+
+/**
+ * Decrypts a value encrypted with encrypt()
+ */
+export function decrypt(encryptedValue: string): string {
+  if (!encryptedValue) return encryptedValue;
   
+  const masterKey = process.env.ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!masterKey) {
+    // If no key, assume it's plain text (backward compatibility)
+    return encryptedValue;
+  }
+
   try {
-    const parts = encryptedData.split(":");
-    if (parts.length !== 3) {
-      // Might be plain text from before encryption was enabled
-      return encryptedData;
-    }
+    // Decode from base64
+    const combined = Buffer.from(encryptedValue, "base64");
     
-    const [ivHex, authTagHex, encrypted] = parts;
-    const iv = Buffer.from(ivHex, "hex");
-    const authTag = Buffer.from(authTagHex, "hex");
-    const key = Buffer.from(ENCRYPTION_KEY, "hex");
+    // Extract components
+    const salt = combined.subarray(0, SALT_LENGTH);
+    const iv = combined.subarray(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
+    const tag = combined.subarray(SALT_LENGTH + IV_LENGTH, SALT_LENGTH + IV_LENGTH + TAG_LENGTH);
+    const encrypted = combined.subarray(SALT_LENGTH + IV_LENGTH + TAG_LENGTH);
     
+    // Derive key
+    const key = deriveKey(masterKey, salt);
+    
+    // Create decipher
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
     
-    decipher.setAuthTag(authTag);
-    
-    let decrypted = decipher.update(encrypted, "hex", "utf8");
+    // Decrypt
+    let decrypted = decipher.update(encrypted, undefined, "utf8");
     decrypted += decipher.final("utf8");
     
     return decrypted;
   } catch (error) {
     console.error("Decryption error:", error);
-    throw new Error("Failed to decrypt data");
+    // If decryption fails, might be plain text (backward compatibility)
+    return encryptedValue;
   }
 }
-
-/**
- * Safely encrypts a value if it exists, returns null otherwise
- */
-export function safeEncrypt(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    return encrypt(value);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Safely decrypts a value if it exists, returns null otherwise
- */
-export function safeDecrypt(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    return decrypt(value);
-  } catch {
-    return null;
-  }
-}
-
