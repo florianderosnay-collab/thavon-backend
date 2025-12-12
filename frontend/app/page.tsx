@@ -5,7 +5,7 @@ import axios from "axios";
 import { supabase } from "@/lib/supabaseClient"; 
 import { 
   Phone, Users, CalendarCheck, TrendingUp, Play, Activity,
-  History, CheckCircle2
+  History, CheckCircle2, Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,12 +22,29 @@ const calculateTrialDays = (trialEndDate: string | null) => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
+// --- HELPER FUNCTION: Format numbers with commas ---
+const formatNumber = (num: number): string => {
+    return num.toLocaleString('en-US');
+};
+
+interface DashboardMetrics {
+  totalLeads: number;
+  leadsChange: number;
+  callsAttempted: number;
+  connectionRate: number;
+  appointments: number;
+  nextAppointment: string;
+  pipelineValue: string;
+}
+
 export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("System Standby");
   const [agency, setAgency] = useState<any>(null); 
   const [trialDaysLeft, setTrialDaysLeft] = useState(0);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
 
   // 1. Fetch Agency Data and Check Trial on Load
   useEffect(() => {
@@ -81,6 +98,31 @@ export default function Dashboard() {
     };
     
     checkAccess();
+  }, []);
+
+  // Fetch dashboard metrics
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        setMetricsLoading(true);
+        const response = await fetch("/api/dashboard/metrics");
+        if (response.ok) {
+          const data = await response.json();
+          setMetrics(data);
+        } else {
+          console.error("Failed to fetch metrics");
+        }
+      } catch (error) {
+        console.error("Error fetching metrics:", error);
+      } finally {
+        setMetricsLoading(false);
+      }
+    };
+
+    fetchMetrics();
+    // Refresh metrics every 30 seconds
+    const interval = setInterval(fetchMetrics, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleStartCampaign = async () => {
@@ -184,10 +226,37 @@ export default function Dashboard() {
         
         {/* KEY METRICS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <StatCard icon={Users} label="Total Leads" value="1,240" sub="+12% this week" />
-          <StatCard icon={Phone} label="Calls Attempted" value="842" sub="68% connection rate" />
-          <StatCard icon={CalendarCheck} label="Appointments" value="18" sub="Next: Tue 14:00" highlight />
-          <StatCard icon={TrendingUp} label="Pipeline Value" value="€2.4M" sub="Based on avg. comm." />
+          <StatCard 
+            icon={Users} 
+            label="Total Leads" 
+            value={metrics ? formatNumber(metrics.totalLeads) : "0"} 
+            sub={metrics && metrics.leadsChange !== 0 
+              ? `${metrics.leadsChange > 0 ? '+' : ''}${metrics.leadsChange}% this week` 
+              : metrics ? "No change this week" : "Loading..."} 
+            loading={metricsLoading}
+          />
+          <StatCard 
+            icon={Phone} 
+            label="Calls Attempted" 
+            value={metrics ? formatNumber(metrics.callsAttempted) : "0"} 
+            sub={metrics ? `${metrics.connectionRate}% connection rate` : "Loading..."} 
+            loading={metricsLoading}
+          />
+          <StatCard 
+            icon={CalendarCheck} 
+            label="Appointments" 
+            value={metrics ? formatNumber(metrics.appointments) : "0"} 
+            sub={metrics?.nextAppointment || "Loading..."} 
+            highlight 
+            loading={metricsLoading}
+          />
+          <StatCard 
+            icon={TrendingUp} 
+            label="Pipeline Value" 
+            value={metrics?.pipelineValue || "€0"} 
+            sub={metricsLoading ? "Loading..." : "Based on avg. comm."} 
+            loading={metricsLoading}
+          />
         </div>
 
         {/* MAIN CONTROL AREA */}
@@ -307,20 +376,24 @@ export default function Dashboard() {
 
 // --- SUB COMPONENTS (KEEP AS IS) ---
 
-function StatCard({ icon: Icon, label, value, sub, highlight }: any) {
+function StatCard({ icon: Icon, label, value, sub, highlight, loading }: any) {
   return (
     <Card className={`border-none shadow-sm transition-all hover:shadow-md ${highlight ? 'bg-gradient-to-br from-violet-50 to-white border-violet-100 border' : 'bg-white'}`}>
       <CardContent className="p-6">
         <div className="flex justify-between items-start mb-4">
           <div className={`p-2 rounded-lg ${highlight ? 'bg-violet-100 text-violet-600' : 'bg-slate-100 text-slate-600'}`}>
-            <Icon className="w-5 h-5" />
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Icon className="w-5 h-5" />
+            )}
           </div>
-          {highlight && <div className="h-2 w-2 bg-violet-500 rounded-full animate-pulse"></div>}
+          {highlight && !loading && <div className="h-2 w-2 bg-violet-500 rounded-full animate-pulse"></div>}
         </div>
         <div>
           <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">{label}</p>
-          <h3 className="text-2xl font-bold text-slate-900">{value}</h3>
-          <p className="text-xs text-slate-400 mt-1">{sub}</p>
+          <h3 className="text-2xl font-bold text-slate-900">{loading ? "..." : value}</h3>
+          <p className="text-xs text-slate-400 mt-1">{loading ? "Loading..." : sub}</p>
         </div>
       </CardContent>
     </Card>
