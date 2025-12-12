@@ -45,6 +45,8 @@ export default function Dashboard() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(true);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   // 1. Fetch Agency Data and Check Trial on Load
   useEffect(() => {
@@ -125,6 +127,31 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch recent activity
+  useEffect(() => {
+    const fetchActivity = async () => {
+      try {
+        setActivitiesLoading(true);
+        const response = await fetch("/api/dashboard/activity");
+        if (response.ok) {
+          const data = await response.json();
+          setActivities(data.activities || []);
+        } else {
+          console.error("Failed to fetch activity");
+        }
+      } catch (error) {
+        console.error("Error fetching activity:", error);
+      } finally {
+        setActivitiesLoading(false);
+      }
+    };
+
+    fetchActivity();
+    // Refresh activity every 15 seconds (more frequent for real-time feel)
+    const interval = setInterval(fetchActivity, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleStartCampaign = async () => {
     // Safety check: Ensure agency data is loaded
     if (!agency) {
@@ -199,10 +226,8 @@ export default function Dashboard() {
       pricingStatusMessage = "You're on the Pro Plan. Happy Hunting!";
   } else if (isTrial) {
       pricingStatusMessage = `Free Trial Active. ${trialDaysLeft} days remaining.`;
-  } else if (isExpired) {
-      pricingStatusMessage = "Trial Expired. Upgrade to Pro to resume hunting.";
   } else {
-      pricingStatusMessage = "Checking subscription status...";
+      pricingStatusMessage = "No active subscription. Start your free trial or upgrade.";
   }
 
 
@@ -343,29 +368,33 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6 relative">
-                {/* Connector Line */}
-                <div className="absolute left-[19px] top-2 bottom-2 w-[1px] bg-slate-100"></div>
+              {activitiesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                </div>
+              ) : activities.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-slate-500">No recent activity</p>
+                  <p className="text-xs text-slate-400 mt-1">Activity will appear here as leads are processed</p>
+                </div>
+              ) : (
+                <div className="space-y-6 relative">
+                  {/* Connector Line */}
+                  {activities.length > 1 && (
+                    <div className="absolute left-[19px] top-2 bottom-2 w-[1px] bg-slate-100"></div>
+                  )}
 
-                <TimelineItem 
-                  time="Just now" 
-                  title="Appointment Booked" 
-                  desc="Florian @ 8001 Strassen"
-                  type="success"
-                />
-                <TimelineItem 
-                  time="2 mins ago" 
-                  title="Voicemail Drop" 
-                  desc="+352 691 55..."
-                  type="neutral"
-                />
-                <TimelineItem 
-                  time="10 mins ago" 
-                  title="Objection Handled" 
-                  desc="'Bring me a buyer' -> Overcome"
-                  type="neutral"
-                />
-              </div>
+                  {activities.map((activity, index) => (
+                    <TimelineItem 
+                      key={activity.id || index}
+                      time={activity.time} 
+                      title={activity.title} 
+                      desc={activity.description}
+                      type={activity.type}
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
