@@ -25,6 +25,10 @@ CREATE INDEX IF NOT EXISTS idx_agency_integrations_status ON agency_integrations
 -- Enable RLS
 ALTER TABLE agency_integrations ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (for idempotent migration)
+DROP POLICY IF EXISTS "Agencies can view their own integrations" ON agency_integrations;
+DROP POLICY IF EXISTS "Service role has full access" ON agency_integrations;
+
 -- RLS Policy: Agencies can only see their own integrations
 CREATE POLICY "Agencies can view their own integrations"
   ON agency_integrations FOR SELECT
@@ -49,6 +53,9 @@ BEGIN
   RETURN NEW;
 END;
 $$ language 'plpgsql';
+
+-- Drop existing trigger if it exists (for idempotent migration)
+DROP TRIGGER IF EXISTS update_agency_integrations_updated_at ON agency_integrations;
 
 -- Trigger to auto-update updated_at
 CREATE TRIGGER update_agency_integrations_updated_at

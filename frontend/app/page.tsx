@@ -57,14 +57,24 @@ export default function Dashboard() {
   }, []);
 
   const handleStartCampaign = async () => {
-    if (!agency) return;
+    if (!agency) {
+      alert("⚠️ Agency information not loaded. Please refresh the page.");
+      return;
+    }
     
     // --- THE GATEKEEPER ---
     const isTrialActive = trialDaysLeft > 0;
+    const subscriptionActive = agency.subscription_status === 'active';
     
-    if (agency.subscription_status !== 'active' && !isTrialActive) {
+    // Block if subscription is not active AND trial is not active
+    if (!subscriptionActive && !isTrialActive) {
         alert("⚠️ Trial Ended: Your trial has expired. Please upgrade to continue hunting.");
         return;
+    }
+
+    // Additional safety check: prevent double-clicks
+    if (loading) {
+      return;
     }
 
     setLoading(true);
@@ -199,8 +209,8 @@ export default function Dashboard() {
                     // IF PAID OR TRIAL: Show the Start Button
                     <Button 
                         onClick={handleStartCampaign} 
-                        disabled={loading}
-                        className="w-full h-14 text-lg font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+                        disabled={loading || !agency || !isReadyToHunt}
+                        className="w-full h-14 text-lg font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? (
                         <span className="animate-pulse">Initializing Neural Network...</span>
@@ -214,7 +224,8 @@ export default function Dashboard() {
                     // IF EXPIRED: Show the Upgrade Button
                     <Button 
                         onClick={handleUpgrade} // Calls your API to redirect to Stripe Checkout
-                        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg hover:opacity-90 transition-all active:scale-[0.99]"
+                        disabled={loading}
+                        className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg hover:opacity-90 transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         🚀 UPGRADE TO PRO (€500/mo)
                     </Button>
