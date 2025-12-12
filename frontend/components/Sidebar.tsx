@@ -8,11 +8,11 @@ import { Link as LinkIcon } from "lucide-react"; // Import icon
 
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-  { icon: Users, label: "Leads", href: "/leads" },
-  { icon: Briefcase, label: "Team", href: "/team" }, // NEW TAB
-  { icon: LinkIcon, label: "Integrations", href: "/integrations" },
-  { icon: Settings, label: "Settings", href: "/settings" },
+  { icon: LayoutDashboard, label: "Control Center", href: "/" }, // Changed: Dashboard -> Control Center
+  { icon: Users, label: "Leads & Data", href: "/leads" }, // Changed: Leads -> Leads & Data
+  { icon: Briefcase, label: "Team Bullpen", href: "/team" }, // Changed: Team -> Team Bullpen
+  { icon: Settings, label: "Agency Config", href: "/settings" }, // Changed: Settings -> Agency Config
+  { icon: LinkIcon, label: "Integrations", href: "/integrations" }, // Keeping the new Integrations link
 ];
 
 export function Sidebar() {

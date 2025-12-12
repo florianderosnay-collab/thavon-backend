@@ -4,58 +4,36 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { supabase } from "@/lib/supabaseClient"; 
 import { 
-  Phone, 
-  Users, 
-  CalendarCheck, 
-  TrendingUp, 
-  Play, 
-  Activity,
-  History,
-  CheckCircle2
+  Phone, Users, CalendarCheck, TrendingUp, Play, Activity,
+  History, CheckCircle2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-// YOUR RAILWAY URL
+// YOUR RAILWAY URL (Used by the backend to trigger calls)
 const API_URL = "https://web-production-274e.up.railway.app"; 
+
+// --- HELPER FUNCTION: Calculates days left in trial ---
+const calculateTrialDays = (trialEndDate: string | null) => {
+    if (!trialEndDate) return 0;
+    const end = new Date(trialEndDate);
+    const now = new Date();
+    const diffTime = end.getTime() - now.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("System Standby");
-  const [agency, setAgency] = useState<any>(null); // Store full agency data to check subscription
+  const [agency, setAgency] = useState<any>(null); 
+  const [trialDaysLeft, setTrialDaysLeft] = useState(0);
 
-   const handleUpgrade = async () => {
-    if (!agency) return;
-    setLoading(true);
-    try {
-      // Get current user email for the checkout pre-fill
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const response = await axios.post("/api/checkout", {
-        agencyId: agency.id,
-        email: user?.email
-      });
-
-      // Redirect to Stripe
-      window.location.href = response.data.url;
-    } catch (error: any) {
-      console.error("Checkout Failed:", error);
-      
-      // LOG THE API ERROR MESSAGE IF IT EXISTS
-      // This is what will give us the direct error from your deployed API
-      const apiErrorMessage = error.response?.data?.error || "Unknown error occurred. Check Vercel Logs for /api/checkout.";
-      
-      alert(`Could not initialize checkout. API Error: ${apiErrorMessage}`);
-      setLoading(false);
-    }
-  };
-  // 1. Fetch Agency Data on Load
+  // 1. Fetch Agency Data and Check Trial on Load
   useEffect(() => {
     const checkAccess = async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Get the link table
         const { data: member } = await supabase
             .from("agency_members")
             .select("agency_id")
@@ -63,14 +41,16 @@ export default function Dashboard() {
             .single();
 
         if (member) {
-            // Fetch the FULL Agency details (including subscription_status)
             const { data: agencyData } = await supabase
                 .from("agencies")
                 .select("*")
                 .eq("id", member.agency_id)
                 .single();
             
-            setAgency(agencyData);
+            if (agencyData) {
+                setAgency(agencyData);
+                setTrialDaysLeft(calculateTrialDays(agencyData.trial_ends_at));
+            }
         }
     };
     checkAccess();
@@ -80,37 +60,76 @@ export default function Dashboard() {
     if (!agency) return;
     
     // --- THE GATEKEEPER ---
-    // If subscription is not active, stop them here.
-    if (agency.subscription_status !== 'active') {
-        alert("⚠️ Access Denied: You are on the Free Plan. Please upgrade to start hunting.");
+    // Trial ends when status is not 'active' AND trial is over (0 days left)
+    const isTrialActive = trialDaysLeft > 0;
+    
+    if (agency.subscription_status !== 'active' && !isTrialActive) {
+        alert("⚠️ Trial Ended: Your trial has expired. Please upgrade to continue hunting.");
         return;
     }
+    // If on free trial, let them hunt, but keep the status check for after trial
 
     setLoading(true);
     setStatus("Identifying Agency...");
     
     try {
       setStatus("Initiating AI Agents...");
-      // Send the ID to Python so it knows who to call
       const response = await axios.post(`${API_URL}/start-campaign`, { 
         agency_id: agency.id 
       });
       
       setStatus(`Success: ${response.data.message}`);
     } catch (error: any) {
-      console.error(error);
+      console.error("Checkout Failed:", error);
+      const apiErrorMessage = error.response?.data?.error || "Unknown error occurred.";
+      alert(`Could not initialize checkout. API Error: ${apiErrorMessage}`);
       setStatus(`Error: ${error.message || "Connection failed"}`);
     }
     setLoading(false);
   };
 
-  // Helper to check if they paid
+  const handleUpgrade = async () => {
+    if (!agency) return;
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const response = await axios.post("/api/checkout", {
+        agencyId: agency.id,
+        email: user?.email
+      });
+
+      window.location.href = response.data.url;
+    } catch (error: any) {
+      console.error("Checkout Failed:", error);
+      const apiErrorMessage = error.response?.data?.error || "Unknown error occurred.";
+      alert(`Could not initialize checkout. API Error: ${apiErrorMessage}`);
+      setLoading(false);
+    }
+  };
+
   const isPro = agency?.subscription_status === 'active';
+  const isTrial = agency?.subscription_status === 'free' && trialDaysLeft > 0;
+  const isExpired = agency?.subscription_status === 'free' && trialDaysLeft <= 0;
+  const isReadyToHunt = isPro || isTrial; // Allow hunting if Pro OR on Trial
+
+  // Dynamic Status Message for the Pricing Box
+  let pricingStatusMessage = "";
+  if (isPro) {
+      pricingStatusMessage = "You're on the Pro Plan. Happy Hunting!";
+  } else if (isTrial) {
+      pricingStatusMessage = `Free Trial Active. ${trialDaysLeft} days remaining.`;
+  } else if (isExpired) {
+      pricingStatusMessage = "Trial Expired. Upgrade to Pro to resume hunting.";
+  } else {
+      pricingStatusMessage = "Checking subscription status...";
+  }
+
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       
-      {/* TOP NAVIGATION / HEADER */}
+      {/* TOP NAVIGATION / HEADER (KEEP AS IS) */}
       <div className="max-w-6xl mx-auto mb-10 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 bg-gradient-to-br from-violet-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-200">
@@ -125,7 +144,7 @@ export default function Dashboard() {
 
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* KEY METRICS GRID */}
+        {/* KEY METRICS GRID (KEEP AS IS) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <StatCard icon={Users} label="Total Leads" value="1,240" sub="+12% this week" />
           <StatCard icon={Phone} label="Calls Attempted" value="842" sub="68% connection rate" />
@@ -138,7 +157,7 @@ export default function Dashboard() {
           
           {/* LEFT: THE AI LAUNCHPAD */}
           <Card className="col-span-2 border-none shadow-xl shadow-slate-200/60 overflow-hidden bg-white">
-            {/* The colored bar turns GRAY if they haven't paid */}
+            {/* The colored bar turns GRAY if not Pro */}
             <div className={`absolute top-0 left-0 w-full h-1 ${isPro ? "bg-gradient-to-r from-violet-500 to-blue-500" : "bg-slate-300"}`}></div>
             
             <CardHeader className="pb-4">
@@ -152,7 +171,11 @@ export default function Dashboard() {
                 {/* Visual Indicator: AI READY vs LOCKED */}
                 {isPro ? (
                     <div className="bg-violet-50 text-violet-700 px-3 py-1 rounded-full text-xs font-bold border border-violet-100 flex items-center gap-2">
-                        <Activity className="w-3 h-3" /> AI READY
+                        <Activity className="w-3 h-3" /> PRO ACTIVE
+                    </div>
+                ) : isTrial ? (
+                    <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-100 flex items-center gap-2">
+                         <Activity className="w-3 h-3" /> TRIAL ACTIVE
                     </div>
                 ) : (
                     <div className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-xs font-bold border border-slate-200">
@@ -163,21 +186,17 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="space-y-6">
               
-              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col justify-between">
                 <div>
-                   <p className="text-sm font-semibold text-slate-700">Target List: FSBO Luxembourg</p>
-                   {/* Show Status explicitly */}
-                   <p className="text-xs text-slate-500 mt-1">Status: <span className="font-medium uppercase">{agency?.subscription_status || "Checking..."}</span></p>
-                </div>
-                <div className="h-2 w-24 bg-slate-200 rounded-full overflow-hidden">
-                   <div className="h-full bg-violet-500 w-1/3"></div>
+                   <p className="text-sm font-semibold text-slate-700">Subscription Status</p>
+                   <p className="text-xs text-slate-500 mt-1">{pricingStatusMessage}</p>
                 </div>
               </div>
 
               {/* THE ACTION BUTTON (Conditional) */}
               <div className="flex flex-col gap-4">
-                {isPro ? (
-                    // IF PAID: Show the Start Button
+                {isReadyToHunt ? (
+                    // IF PAID OR TRIAL: Show the Start Button
                     <Button 
                         onClick={handleStartCampaign} 
                         disabled={loading}
@@ -192,10 +211,9 @@ export default function Dashboard() {
                         )}
                     </Button>
                 ) : (
-                    // IF FREE: Show the Upgrade Button
+                    // IF EXPIRED: Show the Upgrade Button
                     <Button 
-                        // IMPORTANT: Replace this link with your actual Stripe Link later
-                        onClick={handleUpgrade}
+                        onClick={handleUpgrade} // Calls your API to redirect to Stripe Checkout
                         className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg hover:opacity-90 transition-all active:scale-[0.99]"
                     >
                         🚀 UPGRADE TO PRO (€500/mo)
@@ -203,13 +221,13 @@ export default function Dashboard() {
                 )}
                 
                 <p className={`text-center text-sm font-medium ${status.includes('Success') ? 'text-green-600' : 'text-slate-400'}`}>
-                   {isPro ? status : "Upgrade required to launch campaigns."}
+                   {isReadyToHunt ? status : "Upgrade required to launch campaigns."}
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          {/* RIGHT: RECENT ACTIVITY FEED */}
+          {/* RIGHT: RECENT ACTIVITY FEED (KEEP AS IS) */}
           <Card className="border-slate-100 shadow-sm bg-white">
             <CardHeader>
               <CardTitle className="text-base text-slate-900 flex items-center gap-2">
@@ -248,7 +266,7 @@ export default function Dashboard() {
   );
 }
 
-// --- SUB COMPONENTS ---
+// --- SUB COMPONENTS (KEEP AS IS) ---
 
 function StatCard({ icon: Icon, label, value, sub, highlight }: any) {
   return (
