@@ -1,6 +1,6 @@
 # main.py content (Updated to include FUB Fulfillment)
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Body
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Body, Request
 from pydantic import BaseModel
 import requests
 from supabase import create_client, Client
