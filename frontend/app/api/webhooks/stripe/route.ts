@@ -4,7 +4,7 @@ import { stripe } from "@/lib/stripe";
 import { createClient } from "@supabase/supabase-js";
 
 // We need a SUPER ADMIN client to bypass RLS and update the agency
-// Add this key to your .env.local as SUPABASE_SERVICE_ROLE_KEY
+// Ensure SUPABASE_SERVICE_ROLE_KEY is in your .env.local on Vercel
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY! 
@@ -12,7 +12,11 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   const body = await req.text();
-  const signature = headers().get("Stripe-Signature") as string;
+  
+  // --- NEXT.JS 15 FIX ---
+  // In the new version, headers() is a promise, so we must 'await' it.
+  const headersList = await headers();
+  const signature = headersList.get("Stripe-Signature") as string;
 
   let event;
 
@@ -23,6 +27,7 @@ export async function POST(req: Request) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (error: any) {
+    console.error(`Webhook signature verification failed: ${error.message}`);
     return NextResponse.json({ error: `Webhook Error: ${error.message}` }, { status: 400 });
   }
 
@@ -47,9 +52,10 @@ export async function POST(req: Request) {
         console.error("Supabase Update Error:", error);
         return NextResponse.json({ error: "Database update failed" }, { status: 500 });
       }
+    } else {
+        console.warn("⚠️ Payment received but no Agency ID found in metadata.");
     }
   }
 
   return NextResponse.json({ received: true });
 }
-
