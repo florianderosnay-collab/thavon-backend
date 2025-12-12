@@ -24,7 +24,7 @@ export default function Dashboard() {
   const [status, setStatus] = useState("System Standby");
   const [agency, setAgency] = useState<any>(null); // Store full agency data to check subscription
 
-  const handleUpgrade = async () => {
+   const handleUpgrade = async () => {
     if (!agency) return;
     setLoading(true);
     try {
@@ -42,7 +42,8 @@ export default function Dashboard() {
       console.error("Checkout Failed:", error);
       
       // LOG THE API ERROR MESSAGE IF IT EXISTS
-      const apiErrorMessage = error.response?.data?.error || "Unknown error occurred.";
+      // This is what will give us the direct error from your deployed API
+      const apiErrorMessage = error.response?.data?.error || "Unknown error occurred. Check Vercel Logs for /api/checkout.";
       
       alert(`Could not initialize checkout. API Error: ${apiErrorMessage}`);
       setLoading(false);
