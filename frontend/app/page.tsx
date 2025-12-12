@@ -38,9 +38,13 @@ export default function Dashboard() {
 
       // Redirect to Stripe
       window.location.href = response.data.url;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Checkout Failed:", error);
-      alert("Could not initialize checkout.");
+      
+      // LOG THE API ERROR MESSAGE IF IT EXISTS
+      const apiErrorMessage = error.response?.data?.error || "Unknown error occurred.";
+      
+      alert(`Could not initialize checkout. API Error: ${apiErrorMessage}`);
       setLoading(false);
     }
   };
