@@ -11,11 +11,87 @@ import time # For mocking delay
 # --- ENVIRONMENT VARIABLES (Ensure these are set on Railway) ---
 # NOTE: VAPI_Private_Key is your API Key from Vapi, not the Vapi Number ID.
 VAPI_Private_Key = os.environ.get("VAPI_API_KEY") 
-SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+# Support both NEXT_PUBLIC_SUPABASE_URL (Next.js convention) and SUPABASE_URL (standard)
+SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL") or os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") # We use the Service Role Key for secure backend calls
+
+# #region agent log
+log_path = "/Users/florianrosnay/Desktop/thavon-complete/.cursor/debug.log"
+try:
+    with open(log_path, "a") as f:
+        import json
+        log_entry = {
+            "sessionId": "debug-session",
+            "runId": "init",
+            "hypothesisId": "A",
+            "location": "main.py:14-15",
+            "message": "Environment variables check",
+            "data": {
+                "NEXT_PUBLIC_SUPABASE_URL_set": SUPABASE_URL is not None,
+                "NEXT_PUBLIC_SUPABASE_URL_value": SUPABASE_URL[:20] + "..." if SUPABASE_URL and len(SUPABASE_URL) > 20 else SUPABASE_URL,
+                "SUPABASE_SERVICE_ROLE_KEY_set": SUPABASE_KEY is not None,
+                "SUPABASE_SERVICE_ROLE_KEY_length": len(SUPABASE_KEY) if SUPABASE_KEY else 0,
+                "all_env_keys": [k for k in os.environ.keys() if "SUPABASE" in k or "VAPI" in k]
+            },
+            "timestamp": int(time.time() * 1000)
+        }
+        f.write(json.dumps(log_entry) + "\n")
+except Exception as e:
+    pass
+# #endregion
 
 # --- INITIALIZATION ---
 app = FastAPI()
+
+# #region agent log
+try:
+    with open(log_path, "a") as f:
+        log_entry = {
+            "sessionId": "debug-session",
+            "runId": "init",
+            "hypothesisId": "B",
+            "location": "main.py:19",
+            "message": "Before create_client call",
+            "data": {
+                "SUPABASE_URL_type": type(SUPABASE_URL).__name__,
+                "SUPABASE_URL_is_none": SUPABASE_URL is None,
+                "SUPABASE_URL_empty": SUPABASE_URL == "" if SUPABASE_URL else True,
+                "SUPABASE_KEY_is_none": SUPABASE_KEY is None
+            },
+            "timestamp": int(time.time() * 1000)
+        }
+        f.write(json.dumps(log_entry) + "\n")
+except Exception as e:
+    pass
+# #endregion
+
+# Validate environment variables before creating client
+if not SUPABASE_URL:
+    error_msg = "SUPABASE_URL is required. Please set NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL environment variable in Railway."
+    print(f"❌ FATAL ERROR: {error_msg}")
+    # #region agent log
+    try:
+        with open(log_path, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "init",
+                "hypothesisId": "C",
+                "location": "main.py:validation",
+                "message": "SUPABASE_URL validation failed",
+                "data": {"error": error_msg},
+                "timestamp": int(time.time() * 1000)
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        pass
+    # #endregion
+    raise ValueError(error_msg)
+
+if not SUPABASE_KEY:
+    error_msg = "SUPABASE_SERVICE_ROLE_KEY is required. Please set this environment variable in Railway."
+    print(f"❌ FATAL ERROR: {error_msg}")
+    raise ValueError(error_msg)
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- FIX CORS (ALLOW VERCEL TO TALK TO RAILWAY) ---
