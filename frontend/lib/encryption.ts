@@ -1,17 +1,32 @@
 import crypto from "crypto";
 
-// Encryption key - in production, use a secure key management service
-// This should be stored in environment variables and rotated regularly
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString("hex");
+// Encryption key - MUST be set in environment variables
+// Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 const ALGORITHM = "aes-256-gcm";
+
+if (!ENCRYPTION_KEY) {
+  console.warn("⚠️ ENCRYPTION_KEY not set. Tokens will not be encrypted properly.");
+}
 
 /**
  * Encrypts sensitive data (OAuth tokens, API keys)
  */
 export function encrypt(text: string): string {
+  if (!ENCRYPTION_KEY) {
+    // Fallback: return plain text with warning (NOT SECURE - for development only)
+    console.warn("⚠️ Encryption key not set. Storing plain text (INSECURE!)");
+    return text;
+  }
+  
   try {
+    const key = Buffer.from(ENCRYPTION_KEY, "hex");
+    if (key.length !== 32) {
+      throw new Error("Encryption key must be 32 bytes (64 hex characters)");
+    }
+    
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY, "hex"), iv);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
     
     let encrypted = cipher.update(text, "utf8", "hex");
     encrypted += cipher.final("hex");
@@ -30,21 +45,24 @@ export function encrypt(text: string): string {
  * Decrypts sensitive data
  */
 export function decrypt(encryptedData: string): string {
+  if (!ENCRYPTION_KEY) {
+    // Fallback: assume plain text (for development)
+    return encryptedData;
+  }
+  
   try {
     const parts = encryptedData.split(":");
     if (parts.length !== 3) {
-      throw new Error("Invalid encrypted data format");
+      // Might be plain text from before encryption was enabled
+      return encryptedData;
     }
     
     const [ivHex, authTagHex, encrypted] = parts;
     const iv = Buffer.from(ivHex, "hex");
     const authTag = Buffer.from(authTagHex, "hex");
+    const key = Buffer.from(ENCRYPTION_KEY, "hex");
     
-    const decipher = crypto.createDecipheriv(
-      ALGORITHM,
-      Buffer.from(ENCRYPTION_KEY, "hex"),
-      iv
-    );
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     
     decipher.setAuthTag(authTag);
     

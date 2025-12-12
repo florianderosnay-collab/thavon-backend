@@ -196,6 +196,38 @@ export async function POST(req: Request) {
       );
     }
 
+    // Check if token is expired and refresh if needed
+    const now = new Date();
+    const expiresAt = integration.expires_at ? new Date(integration.expires_at) : null;
+    
+    if (expiresAt && expiresAt < now) {
+      // Token expired - try to refresh
+      const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/integrations/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ integrationId, agencyId }),
+      });
+      
+      if (!refreshResponse.ok) {
+        return NextResponse.json(
+          { error: "Token expired and refresh failed. Please reconnect the integration." },
+          { status: 401 }
+        );
+      }
+      
+      // Re-fetch integration with new token
+      const { data: refreshedIntegration } = await supabaseAdmin
+        .from("agency_integrations")
+        .select("*")
+        .eq("agency_id", agencyId)
+        .eq("integration_id", integrationId)
+        .single();
+      
+      if (refreshedIntegration) {
+        integration = refreshedIntegration;
+      }
+    }
+
     // Decrypt access token
     const accessToken = safeDecrypt(integration.access_token);
     if (!accessToken) {
