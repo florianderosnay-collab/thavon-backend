@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 // We need a SUPER ADMIN client to bypass RLS and update the agency
 const supabaseAdmin = createClient(
@@ -9,6 +10,27 @@ const supabaseAdmin = createClient(
 
 // Vapi API endpoint
 const VAPI_API_URL = "https://api.vapi.ai/call/phone";
+
+// Webhook signature validation (optional - for providers that support it)
+function validateWebhookSignature(
+  payload: string,
+  signature: string | null,
+  secret: string
+): boolean {
+  if (!signature || !secret) return true; // Skip validation if not configured
+  
+  try {
+    const hmac = crypto.createHmac("sha256", secret);
+    hmac.update(payload);
+    const expectedSignature = hmac.digest("hex");
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(
   req: Request,
@@ -24,10 +46,29 @@ export async function POST(
       );
     }
 
+    // Get raw body for signature validation
+    const body = await req.text();
+    const signature = req.headers.get("x-webhook-signature") || 
+                     req.headers.get("x-hub-signature-256") ||
+                     req.headers.get("x-signature");
+
+    // Optional: Validate webhook signature if secret is configured
+    const webhookSecret = process.env.WEBHOOK_SECRET;
+    if (webhookSecret && signature) {
+      const isValid = validateWebhookSignature(body, signature, webhookSecret);
+      if (!isValid) {
+        console.error("❌ Invalid webhook signature");
+        return NextResponse.json(
+          { status: "error", message: "Invalid signature" },
+          { status: 401 }
+        );
+      }
+    }
+
     // 1. Parse incoming lead data
     let data: any;
     try {
-      data = await req.json();
+      data = JSON.parse(body);
     } catch (error) {
       return NextResponse.json(
         { status: "error", message: "Invalid JSON" },
@@ -181,4 +222,3 @@ Your goal is to get a live agent on the line if they are serious.
     );
   }
 }
-
