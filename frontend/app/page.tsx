@@ -60,14 +60,12 @@ export default function Dashboard() {
     if (!agency) return;
     
     // --- THE GATEKEEPER ---
-    // Trial ends when status is not 'active' AND trial is over (0 days left)
     const isTrialActive = trialDaysLeft > 0;
     
     if (agency.subscription_status !== 'active' && !isTrialActive) {
         alert("⚠️ Trial Ended: Your trial has expired. Please upgrade to continue hunting.");
         return;
     }
-    // If on free trial, let them hunt, but keep the status check for after trial
 
     setLoading(true);
     setStatus("Identifying Agency...");
@@ -82,7 +80,6 @@ export default function Dashboard() {
     } catch (error: any) {
       console.error("Checkout Failed:", error);
       
-      // LOG THE API ERROR MESSAGE IF IT EXISTS
       const apiErrorMessage = error.response?.data?.error || "Unknown error occurred. Check Vercel Logs for /api/checkout.";
       
       alert(`Could not initialize checkout. API Error: ${apiErrorMessage}`);
@@ -114,7 +111,7 @@ export default function Dashboard() {
   const isPro = agency?.subscription_status === 'active';
   const isTrial = agency?.subscription_status === 'free' && trialDaysLeft > 0;
   const isExpired = agency?.subscription_status === 'free' && trialDaysLeft <= 0;
-  const isReadyToHunt = isPro || isTrial; // Allow hunting if Pro OR on Trial
+  const isReadyToHunt = isPro || isTrial; 
 
   // Dynamic Status Message for the Pricing Box
   let pricingStatusMessage = "";
@@ -132,7 +129,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       
-      {/* TOP NAVIGATION / HEADER (KEEP AS IS) */}
+      {/* TOP NAVIGATION / HEADER */}
       <div className="max-w-6xl mx-auto mb-10 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 bg-gradient-to-br from-violet-600 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-200">
@@ -147,7 +144,7 @@ export default function Dashboard() {
 
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* KEY METRICS GRID (KEEP AS IS) */}
+        {/* KEY METRICS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <StatCard icon={Users} label="Total Leads" value="1,240" sub="+12% this week" />
           <StatCard icon={Phone} label="Calls Attempted" value="842" sub="68% connection rate" />
@@ -230,7 +227,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* RIGHT: RECENT ACTIVITY FEED (KEEP AS IS) */}
+          {/* RIGHT: RECENT ACTIVITY FEED */}
           <Card className="border-slate-100 shadow-sm bg-white">
             <CardHeader>
               <CardTitle className="text-base text-slate-900 flex items-center gap-2">
