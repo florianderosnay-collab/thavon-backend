@@ -1,20 +1,24 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { Stripe } from "@/lib/stripe"; // <-- Import the Stripe class
 import { createClient } from "@supabase/supabase-js";
 
 // We need a SUPER ADMIN client to bypass RLS and update the agency
-// Ensure SUPABASE_SERVICE_ROLE_KEY is in your .env.local on Vercel
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY! 
 );
 
 export async function POST(req: Request) {
+  // FIX 1: Initialize Stripe inside the function (at runtime)
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: "2025-11-17.clover", // The version you fixed in the last step
+    typescript: true,
+  });
+
   const body = await req.text();
   
-  // --- THE FINAL FIX: Silencing TypeScript's strict header type ---
-  // The type system thinks headers() returns a promise, so we cast it to 'any' to allow .get()
+  // FIX 2: Correct TypeScript casting for headers
   const signature = (headers() as any).get("Stripe-Signature") as string;
 
   let event;

@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe"; // We will create this helper next
-import { supabase } from "@/lib/supabaseClient"; // Reuse your existing client if it works server-side, or use admin client
+import { Stripe } from "@/lib/stripe"; // <-- Import the Stripe class
+import { supabase } from "@/lib/supabaseClient"; 
 
 export async function POST(req: Request) {
   try {
+    // FIX 1: Initialize Stripe inside the function (at runtime)
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: "2025-11-17.clover",
+        typescript: true,
+    });
+    
     const { agencyId, email } = await req.json();
 
     if (!agencyId || !email) {
@@ -35,4 +41,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
