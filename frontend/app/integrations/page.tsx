@@ -421,7 +421,7 @@ export default function IntegrationsPage() {
               <h2 className="text-2xl font-bold text-slate-900 mb-1">Automation & Workflow</h2>
               <p className="text-slate-600">Connect any app via Zapier for maximum flexibility</p>
             </div>
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {groupedIntegrations.automation.map((integration) => (
                 <IntegrationCard
                   key={integration.id}
@@ -547,45 +547,45 @@ function IntegrationCard({
   const [showSetup, setShowSetup] = useState(false);
 
   return (
-    <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow">
-      <CardHeader>
+    <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow h-full flex flex-col">
+      <CardHeader className="pb-4">
         <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4 flex-1">
-            <div className={`p-3 rounded-lg bg-slate-100 ${integration.color.replace("text-", "bg-").replace("-500", "-100")}`}>
+          <div className="flex items-start gap-3 flex-1">
+            <div className={`p-2.5 rounded-lg ${integration.color.replace("text-", "bg-").replace("-500", "-100")}`}>
               <div className={integration.color}>
                 {integration.icon}
               </div>
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <CardTitle className="text-xl">{integration.name}</CardTitle>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <CardTitle className="text-lg font-semibold text-slate-900">{integration.name}</CardTitle>
                 {getStatusBadge(integration.status)}
               </div>
-              <CardDescription className="text-sm">
+              <CardDescription className="text-sm text-slate-600 leading-relaxed">
                 {integration.description}
               </CardDescription>
             </div>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 flex-1 flex flex-col">
         {/* Webhook URL Display */}
         {integration.webhookUrl && (
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
               Webhook URL
             </label>
             <div className="flex items-center gap-2">
               <Input
                 value={integration.webhookUrl}
                 readOnly
-                className="font-mono text-xs bg-slate-50"
+                className="font-mono text-xs bg-slate-50 border-slate-200"
               />
               <Button
                 size="icon"
                 variant="outline"
                 onClick={onCopy}
-                className="shrink-0"
+                className="shrink-0 h-9 w-9"
               >
                 {copied ? (
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -598,12 +598,12 @@ function IntegrationCard({
         )}
 
         {/* Setup Instructions Toggle */}
-        <div>
+        <div className="mt-auto">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setShowSetup(!showSetup)}
-            className="w-full justify-between"
+            className="w-full justify-between text-slate-600 hover:text-slate-900"
           >
             <span className="text-sm font-medium">Setup Instructions</span>
             <ChevronRight className={`w-4 h-4 transition-transform ${showSetup ? "rotate-90" : ""}`} />
@@ -625,7 +625,7 @@ function IntegrationCard({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2 pt-2 border-t">
+        <div className="flex gap-2 pt-3 border-t border-slate-100 mt-auto">
           {integration.status === "connected" ? (
             <>
               {integration.type === "oauth" && onSync && (
@@ -667,7 +667,7 @@ function IntegrationCard({
           ) : (
             <Button
               size="sm"
-              className="flex-1 bg-violet-600 hover:bg-violet-700"
+              className="flex-1 bg-violet-600 hover:bg-violet-700 text-white"
               onClick={onConnect}
               disabled={integration.status === "connecting"}
             >
