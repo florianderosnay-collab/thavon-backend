@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Stripe } from "@/lib/stripe"; // <-- Import the Stripe class
 import { createClient } from "@supabase/supabase-js";
@@ -18,8 +17,8 @@ export async function POST(req: Request) {
 
   const body = await req.text();
   
-  // FIX 2: Correct TypeScript casting for headers
-  const signature = (headers() as any).get("Stripe-Signature") as string;
+  // FIX 2: Access headers from the Request object directly
+  const signature = req.headers.get("Stripe-Signature") as string;
 
   let event;
 

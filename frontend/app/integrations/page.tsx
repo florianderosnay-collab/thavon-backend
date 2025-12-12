@@ -5,12 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Copy, Zap, ExternalLink, Key, Smartphone, Users } from "lucide-react";
 
-// YOUR RAILWAY URL
-const API_URL = "https://web-production-274e.up.railway.app"; 
-
 export default function IntegrationsPage() {
   const [agencyId, setAgencyId] = useState("");
   const [copied, setCopied] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
 
   useEffect(() => {
     const fetchAgency = async () => {
@@ -21,13 +19,19 @@ export default function IntegrationsPage() {
         .select("agency_id")
         .eq("user_id", user.id)
         .single();
-      if (member) setAgencyId(member.agency_id);
+      if (member) {
+        setAgencyId(member.agency_id);
+        // Construct the frontend webhook URL
+        // For external webhooks (Zapier), we need the full URL
+        // Use NEXT_PUBLIC_BASE_URL environment variable if set, otherwise use current origin
+        const baseUrl = typeof window !== 'undefined' 
+          ? window.location.origin 
+          : '';
+        setWebhookUrl(`${baseUrl}/api/webhooks/inbound/${member.agency_id}`);
+      }
     };
     fetchAgency();
   }, []);
-
-  // This is the universal endpoint for all inbound leads
-  const webhookUrl = `${API_URL}/webhooks/inbound/${agencyId}`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(webhookUrl);
