@@ -13,10 +13,10 @@ const supabaseAdmin = createClient(
 export async function POST(req: Request) {
   const body = await req.text();
   
-  // --- NEXT.JS 15 FIX ---
-  // In the new version, headers() is a promise, so we must 'await' it.
-  const headersList = await headers();
-  const signature = headersList.get("Stripe-Signature") as string;
+  // --- CORRECT NEXT.JS 15 FIX ---
+  // We use the imported 'headers' function directly, then call .get() on the result.
+  // The 'await' is implicitly handled by the Next.js runtime when using headers() on the server.
+  const signature = headers().get("Stripe-Signature") as string;
 
   let event;
 
