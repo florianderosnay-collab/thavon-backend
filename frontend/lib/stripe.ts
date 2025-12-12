@@ -1,7 +1,8 @@
 import Stripe from "stripe";
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-12-18.acacia", // Use whatever the latest version suggested by VS Code is
+  // FIX: Updated to the version the compiler demanded (2025-11-17.clover)
+  apiVersion: "2025-11-17.clover", 
   typescript: true,
 });
 
