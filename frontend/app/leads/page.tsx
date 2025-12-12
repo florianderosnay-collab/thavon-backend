@@ -155,14 +155,95 @@ export default function LeadsPage() {
     }
   };
 
-  const downloadTemplate = () => {
-    const csvContent = "First Name,Last Name,Email,Phone,Address,City,State,ZIP,Property Type,Property Value,Lead Source\nJohn,Doe,john@example.com,+352691123456,10 Avenue Monterey,Luxembourg,Luxembourg,2163,House,850000,Website";
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "thavon_leads_template.csv";
-    a.click();
+  const downloadTemplate = async () => {
+    try {
+      // Dynamically import xlsx for template generation
+      const XLSX = (await import("xlsx")).default;
+      
+      // Create a workbook
+      const workbook = XLSX.utils.book_new();
+      
+      // Define the template data with headers and example row
+      const templateData = [
+        // Headers
+        [
+          "First Name",
+          "Last Name",
+          "Email",
+          "Phone",
+          "Address",
+          "City",
+          "State",
+          "ZIP",
+          "Property Type",
+          "Property Value",
+          "Lead Source"
+        ],
+        // Example row
+        [
+          "John",
+          "Doe",
+          "john@example.com",
+          "+352 691 123 456",
+          "10 Avenue Monterey",
+          "Luxembourg",
+          "Luxembourg",
+          "2163",
+          "House",
+          "850000",
+          "Website"
+        ],
+        // Empty rows for user to fill
+        ["", "", "", "", "", "", "", "", "", "", ""],
+        ["", "", "", "", "", "", "", "", "", "", ""],
+        ["", "", "", "", "", "", "", "", "", "", ""],
+      ];
+      
+      // Create worksheet from data
+      const worksheet = XLSX.utils.aoa_to_sheet(templateData);
+      
+      // Set column widths for better readability
+      worksheet["!cols"] = [
+        { wch: 12 }, // First Name
+        { wch: 12 }, // Last Name
+        { wch: 25 }, // Email
+        { wch: 18 }, // Phone
+        { wch: 25 }, // Address
+        { wch: 15 }, // City
+        { wch: 12 }, // State
+        { wch: 8 },  // ZIP
+        { wch: 15 }, // Property Type
+        { wch: 15 }, // Property Value
+        { wch: 15 }, // Lead Source
+      ];
+      
+      // Style the header row (bold)
+      const headerRange = XLSX.utils.decode_range(worksheet["!ref"] || "A1");
+      for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        if (!worksheet[cellAddress]) continue;
+        worksheet[cellAddress].s = {
+          font: { bold: true },
+          fill: { fgColor: { rgb: "E5E7EB" } }, // Light gray background
+        };
+      }
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Leads Template");
+      
+      // Generate Excel file and download
+      XLSX.writeFile(workbook, "thavon_leads_template.xlsx");
+    } catch (error) {
+      console.error("Error generating template:", error);
+      // Fallback to CSV if Excel generation fails
+      const csvContent = "First Name,Last Name,Email,Phone,Address,City,State,ZIP,Property Type,Property Value,Lead Source\nJohn,Doe,john@example.com,+352691123456,10 Avenue Monterey,Luxembourg,Luxembourg,2163,House,850000,Website";
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "thavon_leads_template.csv";
+      a.click();
+    }
   };
 
   const handleFileUpload = async (event: any) => {
@@ -334,6 +415,14 @@ export default function LeadsPage() {
           <div className="flex gap-3">
             <Button 
               variant="outline" 
+              onClick={downloadTemplate}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Download Template
+            </Button>
+            <Button 
+              variant="outline" 
               onClick={() => document.getElementById("file-upload")?.click()}
               className="gap-2"
             >
@@ -368,6 +457,14 @@ export default function LeadsPage() {
                 </p>
                 {leads.length === 0 && (
                   <div className="mt-4 flex gap-3 justify-center">
+                    <Button
+                      variant="outline"
+                      onClick={downloadTemplate}
+                      className="gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download Template
+                    </Button>
                     <Button
                       variant="outline"
                       onClick={() => document.getElementById("file-upload")?.click()}
