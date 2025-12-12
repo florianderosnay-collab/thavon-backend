@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { Stripe } from "@/lib/stripe"; // <-- Import the Stripe class
+import { getStripeClient } from "@/lib/stripe";
 import { supabase } from "@/lib/supabaseClient"; 
 
 export async function POST(req: Request) {
   try {
-    // FIX 1: Initialize Stripe inside the function (at runtime)
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-        apiVersion: "2025-11-17.clover",
-        typescript: true,
-    });
+    // Initialize Stripe client using helper function
+    const stripe = getStripeClient();
     
     const { agencyId, email } = await req.json();
 

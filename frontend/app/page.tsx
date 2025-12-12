@@ -27,52 +27,80 @@ export default function Dashboard() {
   const [status, setStatus] = useState("System Standby");
   const [agency, setAgency] = useState<any>(null); 
   const [trialDaysLeft, setTrialDaysLeft] = useState(0);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // 1. Fetch Agency Data and Check Trial on Load
   useEffect(() => {
     const checkAccess = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data: member } = await supabase
-            .from("agency_members")
-            .select("agency_id")
-            .eq("user_id", user.id)
-            .single();
-
-        if (member) {
-            const { data: agencyData } = await supabase
-                .from("agencies")
-                .select("*")
-                .eq("id", member.agency_id)
-                .single();
-            
-            if (agencyData) {
-                setAgency(agencyData);
-                setTrialDaysLeft(calculateTrialDays(agencyData.trial_ends_at));
-            }
+      try {
+        setInitialLoading(true);
+        
+        // Get logged-in user
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+          console.error("User authentication error:", userError);
+          setInitialLoading(false);
+          return;
         }
+
+        // Get user's agency membership
+        const { data: member, error: memberError } = await supabase
+          .from("agency_members")
+          .select("agency_id")
+          .eq("user_id", user.id)
+          .single();
+
+        if (memberError || !member) {
+          console.error("Agency membership error:", memberError);
+          setInitialLoading(false);
+          return;
+        }
+
+        // Fetch agency data including subscription_status
+        const { data: agencyData, error: agencyError } = await supabase
+          .from("agencies")
+          .select("id, subscription_status, trial_ends_at, stripe_customer_id")
+          .eq("id", member.agency_id)
+          .single();
+
+        if (agencyError) {
+          console.error("Agency fetch error:", agencyError);
+          setInitialLoading(false);
+          return;
+        }
+
+        if (agencyData) {
+          setAgency(agencyData);
+          setTrialDaysLeft(calculateTrialDays(agencyData.trial_ends_at));
+        }
+      } catch (error) {
+        console.error("Unexpected error fetching agency data:", error);
+      } finally {
+        setInitialLoading(false);
+      }
     };
+    
     checkAccess();
   }, []);
 
   const handleStartCampaign = async () => {
+    // Safety check: Ensure agency data is loaded
     if (!agency) {
       alert("⚠️ Agency information not loaded. Please refresh the page.");
       return;
     }
     
-    // --- THE GATEKEEPER ---
+    // --- THE GATEKEEPER: Subscription Status Check ---
     const isTrialActive = trialDaysLeft > 0;
     const subscriptionActive = agency.subscription_status === 'active';
     
-    // Block if subscription is not active AND trial is not active
+    // Block execution if subscription is not 'active' AND trial is not active
     if (!subscriptionActive && !isTrialActive) {
-        alert("⚠️ Trial Ended: Your trial has expired. Please upgrade to continue hunting.");
-        return;
+      alert("⚠️ Trial Ended: Your trial has expired. Please upgrade to continue hunting.");
+      return;
     }
 
-    // Additional safety check: prevent double-clicks
+    // Additional safety check: prevent double-clicks during loading
     if (loading) {
       return;
     }
