@@ -134,6 +134,97 @@ def process_outbound_calls(leads: list):
 
 # --- API ENDPOINTS ---
 
+# --- INBOUND ENGINE (SPEED-TO-LEAD) ---
+@app.post("/webhooks/inbound/{agency_id}")
+async def handle_inbound_lead(agency_id: str, request: Request, background_tasks: BackgroundTasks):
+    """
+    Receives a lead from Zapier/Website and calls them IMMEDIATELY.
+    """
+    # 1. Parse Data
+    try:
+        data = await request.json()
+    except:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # Map common field names (Zapier sends different keys sometimes)
+    name = data.get('name') or data.get('first_name') or data.get('Name') or "New Lead"
+    phone = data.get('phone') or data.get('phone_number') or data.get('Phone')
+    address = data.get('address') or data.get('Address') or "your inquiry"
+    
+    if not phone:
+        return {"status": "ignored", "reason": "No phone number provided"}
+
+    print(f"🚀 INBOUND TRIGGER: Agency {agency_id} -> Lead {name} ({phone})")
+
+    # 2. Check Subscription (Security)
+    # We query Supabase to make sure this agency is active
+    agency = supabase.table('agencies').select('subscription_status').eq('id', agency_id).single().execute()
+    
+    if not agency.data or agency.data['subscription_status'] != 'active':
+        print("❌ Call blocked: Inactive subscription")
+        return {"status": "error", "message": "Subscription inactive"}
+
+    # 3. Save Lead to Database (Mark as 'called' immediately or 'inbound')
+    lead_data = {
+        "agency_id": agency_id,
+        "name": name,
+        "phone_number": str(phone),
+        "address": address,
+        "status": "calling_inbound", 
+        "asking_price": "0" # Not relevant for inbound usually
+    }
+    supabase.table('leads').insert(lead_data).execute()
+
+    # 4. TRIGGER THE CALL (Immediate)
+    # We use a DIFFERENT script for inbound.
+    inbound_prompt = f"""
+    # IDENTITY
+    You are the AI assistant for a top real estate agency. 
+    You are calling {name} immediately because they just requested information about {address} on our website.
+    
+    # GOAL
+    Confirm they made the request and ask if they are looking to buy or sell. 
+    Your goal is to get a live agent on the line if they are serious.
+    
+    # OPENER
+    "Hi {name}, this is Thavon calling from the real estate team. I saw you just requested an estimate for {address}. Do you have a minute?"
+    """
+
+    call_payload = {
+        # ... (Same structure as your existing outbound call, just different prompt)
+        "phoneNumberId": "YOUR_TWILIO_PHONE_ID_FROM_VAPI", 
+        "customer": { "number": str(phone), "name": name },
+        "assistant": {
+            "model": {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "systemPrompt": inbound_prompt,
+                # Reuse your existing tools or make specific ones
+                "functions": [
+                    {
+                        "name": "bookAppointment",
+                        "description": "Book the meeting.",
+                        "parameters": { "type": "object", "properties": { "time": {"type": "string"}, "notes": {"type": "string"} } }
+                    }
+                ]
+            },
+            "voice": { "provider": "cartesia", "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d" },
+            "firstMessage": f"Hi {name}, this is the real estate team calling about your request. Do you have a minute?",
+        }
+    }
+
+    # Execute Call (in background so we reply to Zapier instantly)
+    background_tasks.add_task(trigger_vapi_call, call_payload)
+
+    return {"status": "calling", "lead": name}
+
+def trigger_vapi_call(payload):
+    try:
+        headers = { "Authorization": f"Bearer {VAPI_Private_Key}", "Content-Type": "application/json" }
+        requests.post("https://api.vapi.ai/call/phone", headers=headers, json=payload)
+    except Exception as e:
+        print(f"Vapi Call Failed: {e}")
+
 @app.post("/start-campaign")
 async def start_campaign(request: CampaignRequest, background_tasks: BackgroundTasks):
     """
