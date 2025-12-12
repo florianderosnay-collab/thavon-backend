@@ -24,6 +24,26 @@ export default function Dashboard() {
   const [status, setStatus] = useState("System Standby");
   const [agency, setAgency] = useState<any>(null); // Store full agency data to check subscription
 
+  const handleUpgrade = async () => {
+    if (!agency) return;
+    setLoading(true);
+    try {
+      // Get current user email for the checkout pre-fill
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const response = await axios.post("/api/checkout", {
+        agencyId: agency.id,
+        email: user?.email
+      });
+
+      // Redirect to Stripe
+      window.location.href = response.data.url;
+    } catch (error) {
+      console.error("Checkout Failed:", error);
+      alert("Could not initialize checkout.");
+      setLoading(false);
+    }
+  };
   // 1. Fetch Agency Data on Load
   useEffect(() => {
     const checkAccess = async () => {
@@ -170,7 +190,7 @@ export default function Dashboard() {
                     // IF FREE: Show the Upgrade Button
                     <Button 
                         // IMPORTANT: Replace this link with your actual Stripe Link later
-                        onClick={() => window.open('YOUR_STRIPE_PAYMENT_LINK_HERE', '_blank')} 
+                        onClick={handleUpgrade}
                         className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg hover:opacity-90 transition-all active:scale-[0.99]"
                     >
                         🚀 UPGRADE TO PRO (€500/mo)
