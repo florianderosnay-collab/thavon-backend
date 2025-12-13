@@ -96,12 +96,24 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- FIX CORS (ALLOW VERCEL TO TALK TO RAILWAY) ---
 from fastapi.middleware.cors import CORSMiddleware
+
+# SECURITY: Restrict CORS to specific origins
+allowed_origins = [
+    "https://app.thavon.io",
+    "https://thavon.io",
+    "http://localhost:3000",  # Only for local development
+]
+
+# Allow all origins in development if NEXT_PUBLIC_BASE_URL is not set
+if os.environ.get("ENVIRONMENT") != "production":
+    allowed_origins.append("*")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allows all origins (Vercel, localhost, etc.)
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-Webhook-Signature"],
 )
 
 # --- DATA MODELS ---

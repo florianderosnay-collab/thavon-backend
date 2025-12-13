@@ -43,10 +43,15 @@ export async function GET(request: Request) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    // Also check all admin users to see what's in the table
-    const { data: allAdmins } = await supabaseAdmin
-      .from('admin_users')
-      .select('*');
+    // SECURITY: Only return admin user list if the current user is an admin
+    // This prevents information disclosure to non-admin users
+    let allAdmins = null;
+    if (adminUser && adminUser.is_active) {
+      const { data: admins } = await supabaseAdmin
+        .from('admin_users')
+        .select('user_id, email, is_active');
+      allAdmins = admins;
+    }
 
     return NextResponse.json({
       authenticated: true,
@@ -54,6 +59,7 @@ export async function GET(request: Request) {
       userEmail: user.email,
       adminCheck: {
         found: !!adminUser,
+        isActive: adminUser?.is_active || false,
         adminUser: adminUser ? {
           id: adminUser.id,
           user_id: adminUser.user_id,
@@ -65,11 +71,8 @@ export async function GET(request: Request) {
         errorCode: adminError?.code,
         errorDetails: adminError
       },
-      allAdmins: allAdmins?.map(a => ({
-        user_id: a.user_id,
-        email: a.email,
-        is_active: a.is_active
-      })) || []
+      // Only return all admins if current user is an admin (security fix)
+      allAdmins: allAdmins || []
     });
   } catch (error: any) {
     return NextResponse.json({

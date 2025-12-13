@@ -38,13 +38,34 @@ export default function SettingsPage() {
     if (!agency) return;
     setLoading(true);
     
-    await supabase.from("agencies").update({
-        company_name: companyName,
-        owner_phone: phone
-    }).eq("id", agency.id);
-    
-    setLoading(false);
-    alert("Settings saved.");
+    try {
+      const response = await fetch("/api/settings/update", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          companyName,
+          phone,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Error updating settings: ${error.error || "Unknown error"}`);
+        setLoading(false);
+        return;
+      }
+
+      // Update local state
+      setAgency({ ...agency, company_name: companyName, owner_phone: phone });
+      alert("Settings saved.");
+    } catch (error: any) {
+      console.error("Update settings error:", error);
+      alert(`Error updating settings: ${error.message || "Unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!agency) return <div className="p-8 text-slate-500">Loading settings...</div>;

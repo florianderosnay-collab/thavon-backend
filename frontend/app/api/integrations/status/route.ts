@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUserAndAgency } from "@/lib/auth-helpers";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,15 @@ const supabaseAdmin = createClient(
 
 export async function GET(req: Request) {
   try {
+    // SECURITY: Verify user is authenticated and get their agency
+    const authData = await getAuthenticatedUserAndAgency(req);
+    if (!authData) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const agencyId = searchParams.get("agencyId");
 
@@ -15,6 +25,14 @@ export async function GET(req: Request) {
       return NextResponse.json(
         { error: "Agency ID is required" },
         { status: 400 }
+      );
+    }
+
+    // SECURITY: Verify user owns the agency they're querying
+    if (authData.agencyId !== agencyId) {
+      return NextResponse.json(
+        { error: "Access denied: You can only view integrations for your own agency" },
+        { status: 403 }
       );
     }
 

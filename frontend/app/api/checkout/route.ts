@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { getStripeClient } from "@/lib/stripe";
-import { supabase } from "@/lib/supabaseClient"; 
+import { supabase } from "@/lib/supabaseClient";
+import { getAuthenticatedUserAndAgency } from "@/lib/auth-helpers";
 
 export async function POST(req: Request) {
   try {
+    // SECURITY: Verify user is authenticated and get their agency
+    const authData = await getAuthenticatedUserAndAgency(req);
+    if (!authData) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     // Initialize Stripe client using helper function
     const stripe = getStripeClient();
     
@@ -11,6 +21,14 @@ export async function POST(req: Request) {
 
     if (!agencyId || !email) {
       return NextResponse.json({ error: "Missing agencyId or email" }, { status: 400 });
+    }
+
+    // SECURITY: Verify user owns the agency they're creating checkout for
+    if (authData.agencyId !== agencyId) {
+      return NextResponse.json(
+        { error: "Access denied: You can only create checkout for your own agency" },
+        { status: 403 }
+      );
     }
 
     // Create a Checkout Session

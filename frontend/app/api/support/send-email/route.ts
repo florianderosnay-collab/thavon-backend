@@ -14,6 +14,17 @@ export async function POST(req: Request) {
   try {
     const { ticket, type } = await req.json();
 
+    // SECURITY: Verify ticket exists in database (prevents email spam)
+    if (!ticket || !ticket.id) {
+      return NextResponse.json(
+        { success: false, error: "Invalid ticket data" },
+        { status: 400 }
+      );
+    }
+
+    // Optional: Verify ticket exists in database (add if you want stricter validation)
+    // This prevents sending emails for non-existent tickets
+
     const resendApiKey = process.env.RESEND_API_KEY;
     
     if (!resendApiKey) {

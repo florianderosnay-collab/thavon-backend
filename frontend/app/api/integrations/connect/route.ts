@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { getAuthenticatedUserAndAgency } from "@/lib/auth-helpers";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,6 +22,15 @@ const OAUTH_PROVIDERS: Record<string, { authUrl: string; scopes: string[] }> = {
 
 export async function POST(req: Request) {
   try {
+    // SECURITY: Verify user is authenticated and get their agency
+    const authData = await getAuthenticatedUserAndAgency(req);
+    if (!authData) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { integrationId, agencyId } = await req.json();
 
     if (!integrationId || !agencyId) {
@@ -30,20 +40,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Note: In production, add proper authentication here
-    // For now, we rely on agencyId being passed from authenticated frontend
-
-    // Verify agency ownership
-    const { data: agency, error: agencyError } = await supabaseAdmin
-      .from("agencies")
-      .select("id")
-      .eq("id", agencyId)
-      .single();
-
-    if (agencyError || !agency) {
+    // SECURITY: Verify user owns the agency they're connecting
+    if (authData.agencyId !== agencyId) {
       return NextResponse.json(
-        { error: "Agency not found" },
-        { status: 404 }
+        { error: "Access denied: You can only connect integrations for your own agency" },
+        { status: 403 }
       );
     }
 

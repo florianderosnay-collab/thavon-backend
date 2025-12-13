@@ -100,9 +100,22 @@ export default function LeadsPage() {
   const deleteLead = async (id: string) => {
     if (!confirm("Are you sure you want to delete this lead?")) return;
     
-    const { error } = await supabase.from("leads").delete().eq("id", id);
-    if (!error) {
+    try {
+      const response = await fetch(`/api/leads/delete?id=${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        alert(`Error deleting lead: ${error.error || "Unknown error"}`);
+        return;
+      }
+
+      // Remove from local state
       setLeads(leads.filter((lead) => lead.id !== id));
+    } catch (error: any) {
+      console.error("Delete lead error:", error);
+      alert(`Error deleting lead: ${error.message || "Unknown error"}`);
     }
   };
 

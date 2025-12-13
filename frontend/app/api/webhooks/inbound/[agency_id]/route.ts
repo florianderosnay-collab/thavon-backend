@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS } from "@/lib/rate-limit";
 
 // We need a SUPER ADMIN client to bypass RLS and update the agency
 const supabaseAdmin = createClient(
@@ -11,13 +12,13 @@ const supabaseAdmin = createClient(
 // Vapi API endpoint
 const VAPI_API_URL = "https://api.vapi.ai/call/phone";
 
-// Webhook signature validation (optional - for providers that support it)
+// Webhook signature validation
 function validateWebhookSignature(
   payload: string,
   signature: string | null,
   secret: string
 ): boolean {
-  if (!signature || !secret) return true; // Skip validation if not configured
+  if (!signature || !secret) return false; // SECURITY: Require both signature and secret
   
   try {
     const hmac = crypto.createHmac("sha256", secret);
@@ -46,23 +47,62 @@ export async function POST(
       );
     }
 
+    // Rate limiting by agency ID
+    const rateLimitKey = getRateLimitKey(req, agencyId);
+    const rateLimitResult = checkRateLimit(
+      `webhook:${rateLimitKey}`,
+      RATE_LIMITS.WEBHOOK
+    );
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          status: "error",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+        {
+          status: 429,
+          headers: {
+            "X-RateLimit-Limit": RATE_LIMITS.WEBHOOK.maxRequests.toString(),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": rateLimitResult.resetTime.toString(),
+            "Retry-After": Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000).toString(),
+          },
+        }
+      );
+    }
+
     // Get raw body for signature validation
     const body = await req.text();
     const signature = req.headers.get("x-webhook-signature") || 
                      req.headers.get("x-hub-signature-256") ||
                      req.headers.get("x-signature");
 
-    // Optional: Validate webhook signature if secret is configured
+    // SECURITY: Require webhook signature validation
     const webhookSecret = process.env.WEBHOOK_SECRET;
-    if (webhookSecret && signature) {
-      const isValid = validateWebhookSignature(body, signature, webhookSecret);
-      if (!isValid) {
-        console.error("❌ Invalid webhook signature");
-        return NextResponse.json(
-          { status: "error", message: "Invalid signature" },
-          { status: 401 }
-        );
-      }
+    if (!webhookSecret) {
+      console.error("❌ WEBHOOK_SECRET not configured");
+      return NextResponse.json(
+        { status: "error", message: "Webhook secret not configured" },
+        { status: 500 }
+      );
+    }
+
+    if (!signature) {
+      console.error("❌ Missing webhook signature");
+      return NextResponse.json(
+        { status: "error", message: "Missing signature header" },
+        { status: 401 }
+      );
+    }
+
+    const isValid = validateWebhookSignature(body, signature, webhookSecret);
+    if (!isValid) {
+      console.error("❌ Invalid webhook signature");
+      return NextResponse.json(
+        { status: "error", message: "Invalid signature" },
+        { status: 401 }
+      );
     }
 
     // 1. Parse incoming lead data
