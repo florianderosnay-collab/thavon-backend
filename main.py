@@ -271,6 +271,28 @@ def trigger_vapi_call(payload):
             print("❌ VAPI_API_KEY not configured")
             return False
         
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "call-debug",
+                    "hypothesisId": "K",
+                    "location": "main.py:trigger_vapi_call:key_check",
+                    "message": "VAPI_API_KEY format check",
+                    "data": {
+                        "key_exists": VAPI_Private_Key is not None,
+                        "key_length": len(VAPI_Private_Key) if VAPI_Private_Key else 0,
+                        "key_prefix": VAPI_Private_Key[:10] if VAPI_Private_Key and len(VAPI_Private_Key) > 10 else "too_short",
+                        "key_suffix": VAPI_Private_Key[-10:] if VAPI_Private_Key and len(VAPI_Private_Key) > 10 else "too_short",
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            pass
+        # #endregion
+        
         headers = { "Authorization": f"Bearer {VAPI_Private_Key}", "Content-Type": "application/json" }
         
         # #region agent log
@@ -326,7 +348,38 @@ def trigger_vapi_call(payload):
             print(f"   -> ✅ Call initiated: {response_data.get('id', 'unknown')}")
             return True
         else:
-            print(f"   -> ❌ Vapi API Error: {response.status_code} - {response.text}")
+            error_msg = response.text[:500] if response.text else "No error message"
+            print(f"   -> ❌ Vapi API Error: {response.status_code} - {error_msg}")
+            
+            # #region agent log
+            try:
+                error_json = {}
+                try:
+                    error_json = response.json() if response.text else {}
+                except:
+                    pass
+                
+                with open(log_path, "a") as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "call-debug",
+                        "hypothesisId": "M",
+                        "location": "main.py:trigger_vapi_call:api_error",
+                        "message": "Vapi API returned error",
+                        "data": {
+                            "status_code": response.status_code,
+                            "error_message": error_msg,
+                            "error_json": error_json,
+                            "is_auth_error": response.status_code == 401,
+                            "suggests_wrong_key_type": "private key" in error_msg.lower() or "public key" in error_msg.lower(),
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception as e:
+                pass
+            # #endregion
+            
             return False
             
     except requests.exceptions.RequestException as e:
@@ -410,6 +463,44 @@ def process_outbound_calls(leads: list):
         phone_number_id = os.environ.get("VAPI_PHONE_NUMBER_ID")
         if not phone_number_id:
             print(f"   -> ⚠️ WARNING: VAPI_PHONE_NUMBER_ID not set, call may fail")
+            # #region agent log
+            try:
+                with open(log_path, "a") as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "call-debug",
+                        "hypothesisId": "N",
+                        "location": "main.py:process_outbound_calls:missing_phone_id",
+                        "message": "VAPI_PHONE_NUMBER_ID not set",
+                        "data": {},
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception as e:
+                pass
+            # #endregion
+        
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "call-debug",
+                    "hypothesisId": "O",
+                    "location": "main.py:process_outbound_calls:payload_complete",
+                    "message": "Vapi payload built",
+                    "data": {
+                        "has_phone_number_id": phone_number_id is not None,
+                        "phone_number_id_length": len(phone_number_id) if phone_number_id else 0,
+                        "payload_keys": list(["phoneNumberId", "customer", "assistant", "metadata", "webhookUrl"]),
+                        "webhook_url": f"{os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')}/api/webhooks/vapi",
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            pass
+        # #endregion
         
         vapi_payload = {
             "phoneNumberId": phone_number_id or "YOUR_TWILIO_PHONE_ID_FROM_VAPI",
