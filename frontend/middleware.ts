@@ -54,6 +54,11 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Skip middleware for auth callback route (needs to be accessible without auth)
+  if (request.nextUrl.pathname === '/auth/callback') {
+    return response
+  }
+
   const { data: { user } } = await supabase.auth.getUser()
 
   // PROTECTED ROUTES LOGIC
@@ -78,7 +83,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - auth/callback (auth callback route - must be accessible without auth)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|auth/callback).*)',
   ],
 }

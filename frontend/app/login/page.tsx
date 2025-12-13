@@ -40,12 +40,29 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
+    // Use environment variable for production, fallback to window.location.origin for local dev
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+    const redirectTo = `${baseUrl}/auth/callback`;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'login/page.tsx:42',message:'Initiating Google OAuth',data:{redirectTo,baseUrl,windowOrigin:window.location.origin,hasEnvVar:!!process.env.NEXT_PUBLIC_BASE_URL},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'H'})}).catch(()=>{});
+    // #endregion
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: redirectTo,
       },
     });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'login/page.tsx:50',message:'OAuth response',data:{hasError:!!error,errorMessage:error?.message,hasUrl:!!data?.url,url:data?.url?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'I'})}).catch(()=>{});
+    // #endregion
+
+    if (error) {
+      console.error('Google OAuth error:', error);
+      alert(`Authentication error: ${error.message}`);
+    }
   };
 
   return (
