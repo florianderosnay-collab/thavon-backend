@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Script from "next/script";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,28 +56,73 @@ export default function SupportPage() {
       }
 
       // Store support ticket in database
-      const { error } = await supabase.from("support_tickets").insert({
-        agency_id: agencyId,
-        name: formData.name,
-        email: formData.email,
-        subject: formData.subject,
-        category: formData.category,
-        priority: formData.priority,
-        message: formData.message,
-        status: "open",
-      });
+      const { data: ticketData, error } = await supabase
+        .from("support_tickets")
+        .insert({
+          agency_id: agencyId,
+          name: formData.name,
+          email: formData.email,
+          subject: formData.subject,
+          category: formData.category,
+          priority: formData.priority,
+          message: formData.message,
+          status: "open",
+        })
+        .select()
+        .single();
 
       if (error) {
         console.error("Error saving support ticket:", error);
-        // Still show success to user, but log the error
-        // In production, you might want to send an email notification as fallback
+        alert(`Error submitting support request: ${error.message}`);
+        setSubmitting(false);
+        return;
       }
 
-      // In production, you can add email notification here using:
-      // - SendGrid API
-      // - Resend API
-      // - AWS SES
-      // - Or your preferred email service
+      // Send email notifications (non-blocking)
+      if (ticketData) {
+        try {
+          // Send confirmation email to customer
+          fetch("/api/support/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ticket: {
+                id: ticketData.id,
+                name: ticketData.name,
+                email: ticketData.email,
+                subject: ticketData.subject,
+                category: ticketData.category,
+                priority: ticketData.priority,
+                message: ticketData.message,
+                created_at: ticketData.created_at,
+              },
+              type: "customer_confirmation",
+            }),
+          }).catch((err) => console.error("Email error:", err));
+
+          // Send notification email to admin
+          fetch("/api/support/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ticket: {
+                id: ticketData.id,
+                name: ticketData.name,
+                email: ticketData.email,
+                subject: ticketData.subject,
+                category: ticketData.category,
+                priority: ticketData.priority,
+                message: ticketData.message,
+                created_at: ticketData.created_at,
+              },
+              type: "admin_notification",
+            }),
+          }).catch((err) => console.error("Email error:", err));
+        } catch (emailError) {
+          console.error("Error sending email notifications:", emailError);
+          // Don't block the submission if email fails
+        }
+      }
       
       setSubmitted(true);
       setFormData({
@@ -96,7 +142,25 @@ export default function SupportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8 font-sans">
+    <>
+      {/* Crisp Live Chat Integration */}
+      {process.env.NEXT_PUBLIC_CRISP_WEBSITE_ID && (
+        <Script id="crisp-chat" strategy="afterInteractive">
+          {`
+            window.$crisp=[];
+            window.CRISP_WEBSITE_ID="${process.env.NEXT_PUBLIC_CRISP_WEBSITE_ID}";
+            (function(){
+              d=document;
+              s=d.createElement("script");
+              s.src="https://client.crisp.chat/l.js";
+              s.async=1;
+              d.getElementsByTagName("head")[0].appendChild(s);
+            })();
+          `}
+        </Script>
+      )}
+      
+      <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -363,6 +427,7 @@ export default function SupportPage() {
         </Card>
       </div>
     </div>
+    </>
   );
 }
 
