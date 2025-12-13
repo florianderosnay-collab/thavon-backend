@@ -66,10 +66,32 @@ export async function GET(request: NextRequest) {
     // #endregion
     
     if (!exchangeError && data?.session) {
+      // Check if user needs onboarding (no agency membership)
+      const { createClient } = await import("@supabase/supabase-js");
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const { data: member } = await supabaseAdmin
+        .from("agency_members")
+        .select("agency_id")
+        .eq("user_id", data.session.user.id)
+        .single();
+
+      // Redirect to onboarding if no agency membership, otherwise use the original redirect
+      const finalRedirect = member ? next : "/onboarding";
+      const finalResponse = NextResponse.redirect(`${origin}${finalRedirect}`);
+      
+      // Copy cookies to final response
+      response.cookies.getAll().forEach(cookie => {
+        finalResponse.cookies.set(cookie.name, cookie.value, cookie);
+      });
+
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:55',message:'Redirecting after success',data:{redirectTo:`${origin}${next}`,origin,next,hasCookies:response.cookies.getAll().length > 0},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:68',message:'Redirecting after success',data:{redirectTo:`${origin}${finalRedirect}`,hasMember:!!member,needsOnboarding:!member},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
-      return response
+      return finalResponse
     } else {
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:59',message:'Session exchange error',data:{errorMessage:exchangeError?.message,errorCode:exchangeError?.status,errorDetails:exchangeError,hasSession:!!data?.session},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'E'})}).catch(()=>{});

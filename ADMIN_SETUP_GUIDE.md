@@ -4,6 +4,12 @@
 
 The admin dashboard is now protected with authentication. Only users in the `admin_users` table can access `/admin/*` routes.
 
+## ⚠️ Quick Start Guide
+
+**For a step-by-step walkthrough, see: [`ADMIN_SETUP_STEP_BY_STEP.md`](./ADMIN_SETUP_STEP_BY_STEP.md)**
+
+This guide provides detailed instructions with screenshots and troubleshooting.
+
 ## Step 1: Run the Migration
 
 1. Go to Supabase Dashboard: https://supabase.com/dashboard

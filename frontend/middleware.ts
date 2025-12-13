@@ -54,8 +54,8 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Skip middleware for auth callback route (needs to be accessible without auth)
-  if (request.nextUrl.pathname === '/auth/callback') {
+  // Skip middleware for auth callback route and onboarding (needs to be accessible without auth)
+  if (request.nextUrl.pathname === '/auth/callback' || request.nextUrl.pathname === '/onboarding') {
     return response
   }
 
@@ -76,12 +76,25 @@ export async function middleware(request: NextRequest) {
   // Protect /admin/* routes - only admins can access
   if (user && request.nextUrl.pathname.startsWith('/admin')) {
     // Check if user is an admin by querying admin_users table
+    // The RLS policy "Users can view their own admin status" allows this query
     const { data: adminUser, error: adminError } = await supabase
       .from('admin_users')
-      .select('id')
+      .select('id, user_id, email, is_active')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .single()
+
+    // Log for debugging (will appear in Vercel logs)
+    if (adminError || !adminUser) {
+      console.log(`❌ Admin access denied for user ${user.id} (${user.email}):`, {
+        error: adminError?.message,
+        code: adminError?.code,
+        details: adminError,
+        pathname: request.nextUrl.pathname
+      })
+    } else {
+      console.log(`✅ Admin access granted for user ${user.id} (${user.email})`)
+    }
 
     // If user is not admin, redirect to dashboard
     if (adminError || !adminUser) {

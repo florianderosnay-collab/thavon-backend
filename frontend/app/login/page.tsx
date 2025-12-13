@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, Loader2, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { Lock, Mail, Loader2, ArrowRight, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,6 +16,28 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
+  const [passwordValidation, setPasswordValidation] = useState({
+    length: false,
+    special: false,
+  });
+
+  const validatePassword = (pwd: string): { valid: boolean; error?: string } => {
+    if (pwd.length < 6 || pwd.length > 8) {
+      return { valid: false, error: "Password must be between 6 and 8 characters" };
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)) {
+      return { valid: false, error: "Password must contain at least one special character" };
+    }
+    return { valid: true };
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    setPasswordValidation({
+      length: value.length >= 6 && value.length <= 8,
+      special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value),
+    });
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,12 +46,52 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        // Validate password for signup
+        const validation = validatePassword(password);
+        if (!validation.valid) {
+          setError(validation.error || "Invalid password");
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
+
+        // Check if user needs onboarding (no agency membership)
+        if (data.user) {
+          const { data: member } = await supabase
+            .from("agency_members")
+            .select("agency_id")
+            .eq("user_id", data.user.id)
+            .single();
+
+          if (!member) {
+            // Redirect to onboarding
+            router.push("/onboarding");
+            return;
+          }
+        }
+
         alert("Account created! Check your email to verify.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+
+        // Check if user needs onboarding
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: member } = await supabase
+            .from("agency_members")
+            .select("agency_id")
+            .eq("user_id", user.id)
+            .single();
+
+          if (!member) {
+            router.push("/onboarding");
+            return;
+          }
+        }
+
         router.push("/");
         router.refresh();
       }
@@ -126,14 +189,35 @@ export default function LoginPage() {
                 <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
                 <Input 
                   type="password" 
-                  placeholder="••••••••" 
+                  placeholder={isSignUp ? "Password (6-8 chars, 1 special)" : "••••••••"} 
                   className="pl-10 h-11 bg-slate-50 border-slate-200"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
                   required
                   minLength={6}
+                  maxLength={8}
                 />
               </div>
+              {isSignUp && password && (
+                <div className="space-y-1 text-xs">
+                  <div className={`flex items-center gap-2 ${passwordValidation.length ? 'text-green-600' : 'text-slate-500'}`}>
+                    {passwordValidation.length ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <XCircle className="w-4 h-4" />
+                    )}
+                    <span>6-8 characters</span>
+                  </div>
+                  <div className={`flex items-center gap-2 ${passwordValidation.special ? 'text-green-600' : 'text-slate-500'}`}>
+                    {passwordValidation.special ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <XCircle className="w-4 h-4" />
+                    )}
+                    <span>At least 1 special character</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {error && (
@@ -142,7 +226,22 @@ export default function LoginPage() {
               </div>
             )}
 
-            <Button type="submit" className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-semibold" disabled={loading}>
+            {!isSignUp && (
+              <div className="text-right">
+                <Link
+                  href="/reset-password"
+                  className="text-sm text-violet-600 hover:underline font-medium"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            )}
+
+            <Button 
+              type="submit" 
+              className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-semibold" 
+              disabled={loading || (isSignUp && (!passwordValidation.length || !passwordValidation.special))}
+            >
               {loading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
@@ -158,7 +257,12 @@ export default function LoginPage() {
               {isSignUp ? "Already have an account?" : "Don't have an account?"}
             </span>
             <button 
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setPassword("");
+                setPasswordValidation({ length: false, special: false });
+                setError("");
+              }}
               className="ml-2 font-semibold text-violet-600 hover:underline"
             >
               {isSignUp ? "Sign In" : "Sign Up"}

@@ -61,24 +61,93 @@ export default function AdminSupportPage() {
   useEffect(() => {
     const checkAdminAccess = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin/support/page.tsx:64',message:'Checking admin access - user fetch',data:{hasUser:!!user,userId:user?.id,userEmail:user?.email,userError:userError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'admin-check',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+
         if (!user) {
+          console.error('❌ No authenticated user found');
           setIsAdmin(false);
           setCheckingAccess(false);
           return;
         }
 
-        // Check if user is admin
+        // Log user ID for debugging
+        console.log('🔍 Checking admin access for user:', {
+          userId: user.id,
+          userEmail: user.email,
+          expectedUserId: '745e11f8-6665-4f7d-8845-bb0225b4b164' // From SQL file
+        });
+
+        // Check if user is admin - try without is_active filter first to see what we get
+        const { data: adminUserWithoutFilter, error: errorWithoutFilter } = await supabase
+          .from('admin_users')
+          .select('id, user_id, email, is_active')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        console.log('🔍 Admin check (without is_active filter):', {
+          found: !!adminUserWithoutFilter,
+          adminUser: adminUserWithoutFilter,
+          error: errorWithoutFilter?.message,
+          errorCode: errorWithoutFilter?.code
+        });
+
+        // Now try with is_active filter
         const { data: adminUser, error } = await supabase
           .from('admin_users')
-          .select('id')
+          .select('id, user_id, email, is_active')
           .eq('user_id', user.id)
           .eq('is_active', true)
-          .single();
+          .maybeSingle();
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin/support/page.tsx:95',message:'Admin check result',data:{userId:user.id,hasAdminUser:!!adminUser,adminUserId:adminUser?.user_id,adminEmail:adminUser?.email,adminIsActive:adminUser?.is_active,isActiveType:typeof adminUser?.is_active,error:error?.message,errorCode:error?.code,errorDetails:error,withoutFilter:!!adminUserWithoutFilter},timestamp:Date.now(),sessionId:'debug-session',runId:'admin-check',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+
+        console.log('🔍 Admin check (with is_active=true filter):', {
+          found: !!adminUser,
+          adminUser: adminUser,
+          error: error?.message,
+          errorCode: error?.code
+        });
+
+        // If no admin user found, check if it's because is_active is a string
+        if (!adminUser && adminUserWithoutFilter) {
+          console.log('⚠️ Admin user found but is_active filter failed. Checking is_active value:', {
+            is_active: adminUserWithoutFilter.is_active,
+            is_active_type: typeof adminUserWithoutFilter.is_active,
+            is_active_value: JSON.stringify(adminUserWithoutFilter.is_active)
+          });
+          
+          // If is_active is string 'true', use that user
+          if (adminUserWithoutFilter.is_active === 'true' || adminUserWithoutFilter.is_active === true) {
+            console.log('✅ Using admin user despite is_active filter issue');
+            setIsAdmin(true);
+            setCheckingAccess(false);
+            fetchTickets();
+            return;
+          }
+        }
 
         if (error || !adminUser) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin/support/page.tsx:120',message:'Admin access denied',data:{userId:user.id,reason:error?.message || 'No admin user found',errorCode:error?.code,hasUserWithoutFilter:!!adminUserWithoutFilter},timestamp:Date.now(),sessionId:'debug-session',runId:'admin-check',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
+          
+          console.error('❌ Admin access denied:', {
+            userId: user.id,
+            reason: error?.message || 'No admin user found',
+            errorCode: error?.code,
+            foundWithoutFilter: !!adminUserWithoutFilter
+          });
+          
           setIsAdmin(false);
           setCheckingAccess(false);
+          // Show alert with user ID for debugging
+          alert(`Admin access denied.\n\nYour User ID: ${user.id}\n\nPlease verify this matches the user_id in the admin_users table.\n\nExpected: 745e11f8-6665-4f7d-8845-bb0225b4b164`);
           // Redirect to dashboard with error message
           window.location.href = '/?error=admin-access-denied';
           return;
@@ -87,8 +156,11 @@ export default function AdminSupportPage() {
         setIsAdmin(true);
         setCheckingAccess(false);
         fetchTickets();
-      } catch (error) {
-        console.error('Error checking admin access:', error);
+      } catch (error: any) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin/support/page.tsx:140',message:'Error in admin check',data:{errorMessage:error?.message,errorStack:error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'admin-check',hypothesisId:'G'})}).catch(()=>{});
+        // #endregion
+        console.error('❌ Error checking admin access:', error);
         setIsAdmin(false);
         setCheckingAccess(false);
         window.location.href = '/?error=admin-access-denied';

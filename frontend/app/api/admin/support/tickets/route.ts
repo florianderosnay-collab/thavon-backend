@@ -36,28 +36,24 @@ async function checkAdminAccess(request: Request): Promise<{ isAdmin: boolean; u
       return { isAdmin: false, error: 'Not authenticated' };
     }
 
-    // Check if user is admin using the is_admin function
-    const { data: isAdmin, error: adminError } = await supabaseAdmin
-      .rpc('is_admin', { user_uuid: user.id })
+    // Check if user is admin - use direct table query (more reliable)
+    // Try both boolean true and string 'true' for is_active (in case of data type mismatch)
+    const { data: adminUser, error: adminError } = await supabaseAdmin
+      .from('admin_users')
+      .select('id, user_id, email, is_active')
+      .eq('user_id', user.id)
+      .or('is_active.eq.true,is_active.eq."true"')
       .single();
 
-    if (adminError) {
-      console.error('Error checking admin status:', adminError);
-      // Fallback: check admin_users table directly
-      const { data: adminUser, error: checkError } = await supabaseAdmin
-        .from('admin_users')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .single();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/admin/support/tickets/route.ts:40',message:'Admin check in API route',data:{userId:user.id,userEmail:user.email,hasAdminUser:!!adminUser,adminUserId:adminUser?.user_id,adminEmail:adminUser?.email,adminIsActive:adminUser?.is_active,error:adminError?.message,errorCode:adminError?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'admin-api-check',hypothesisId:'H'})}).catch(()=>{});
+    // #endregion
 
-      if (checkError || !adminUser) {
-        return { isAdmin: false, userId: user.id, error: 'Not an admin' };
-      }
-      return { isAdmin: true, userId: user.id };
+    if (adminError || !adminUser) {
+      return { isAdmin: false, userId: user.id, error: adminError?.message || 'Not an admin' };
     }
 
-    return { isAdmin: !!isAdmin, userId: user.id };
+    return { isAdmin: true, userId: user.id };
   } catch (error: any) {
     console.error('Error in checkAdminAccess:', error);
     return { isAdmin: false, error: error.message };
