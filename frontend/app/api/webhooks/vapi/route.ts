@@ -77,8 +77,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Determine event type (Vapi may send it in different locations)
-    const eventType = payload.type || payload.event || payload.message?.type;
+    // 3. Determine event type (Vapi sends type in message.type for most events)
+    // Priority: message.type > payload.type > payload.event
+    const message = payload.message || {};
+    const eventType = message.type || payload.type || payload.event;
     
     // #region agent log
     try {
@@ -104,11 +106,14 @@ export async function POST(req: NextRequest) {
     // #endregion
     
     console.log(`📞 Vapi Webhook: ${eventType}`, {
-      callId: payload.call?.id || payload.callId,
-      status: payload.call?.status || payload.status,
+      callId: payload.call?.id || payload.callId || message.call?.id,
+      status: payload.call?.status || payload.status || message.call?.status,
+      hasMessage: !!message,
+      hasPayloadCall: !!payload.call,
+      hasMessageCall: !!message.call,
     });
 
-    // 3. Handle different event types
+    // 4. Handle different event types
     switch (eventType) {
       case "end-of-call-report":
       case "call-status-update":
@@ -236,13 +241,16 @@ async function handleCallUpdate(payload: any) {
   } catch {}
   // #endregion
 
-  const call = payload.call || payload;
-  const callId = call.id || call.callId;
-  const status = call.status || "completed";
+  // Vapi sends call data in message.call for Server URL events
+  // For Webhook URL events, it's in payload.call or top-level
+  const message = payload.message || {};
+  const call = message.call || payload.call || payload;
+  const callId = call.id || call.callId || message.callId || payload.id;
+  const status = call.status || message.status || payload.status || "completed";
   
   // Extract metadata (we pass this when creating the call)
-  // Vapi may send metadata in different locations depending on event type
-  const metadata = call.metadata || call.customData || payload.metadata || {};
+  // Check all possible locations
+  const metadata = call.metadata || message.call?.metadata || call.customData || payload.metadata || payload.customData || {};
   let agencyId = metadata.agency_id || metadata.agencyId;
   let leadId = metadata.lead_id || metadata.leadId;
   let agentId = metadata.agent_id || metadata.agentId;
