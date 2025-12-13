@@ -130,12 +130,14 @@ export async function GET(req: Request) {
     // Format next appointment info
     let nextAppointmentText = "No upcoming appointments";
     if (nextAppointment) {
-      const appointmentTime = nextAppointment.scheduled_at;
+      const appointmentTime = (nextAppointment as any).scheduled_at;
       if (appointmentTime) {
         const date = new Date(appointmentTime);
         const day = date.toLocaleDateString('en-US', { weekday: 'short' });
         const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        const leadName = nextAppointment.leads?.name || "Lead";
+        // Handle leads as either object or array (Supabase relationship query)
+        const leadsData = (nextAppointment as any).leads;
+        const leadName = (Array.isArray(leadsData) ? leadsData[0]?.name : leadsData?.name) || "Lead";
         nextAppointmentText = `Next: ${day} ${time} with ${leadName}`;
       }
     }
