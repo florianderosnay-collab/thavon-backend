@@ -10,3 +10,4 @@ COMMENT ON COLUMN agencies.timezone IS 'IANA timezone identifier for office hour
 -- Create index for faster lookups (optional, but helpful if querying by timezone)
 CREATE INDEX IF NOT EXISTS idx_agencies_timezone ON agencies(timezone);
 
+

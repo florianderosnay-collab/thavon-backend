@@ -79,3 +79,4 @@ CREATE TRIGGER update_appointments_updated_at_column
   FOR EACH ROW
   EXECUTE FUNCTION update_appointments_updated_at();
 
+

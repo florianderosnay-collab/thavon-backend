@@ -120,3 +120,4 @@ After setup, test the encryption:
 
 If you see errors about decryption, double-check that `ENCRYPTION_KEY` is set correctly in all environments.
 
+

@@ -238,3 +238,4 @@ Your Thavon app will have:
 
 All you need to do is **configure the webhook URL in Vapi Dashboard**.
 
+

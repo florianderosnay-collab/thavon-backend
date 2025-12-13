@@ -26,3 +26,4 @@ CREATE INDEX IF NOT EXISTS idx_agents_email ON agents(email) WHERE email IS NOT 
 -- Add index for calendar sync enabled
 CREATE INDEX IF NOT EXISTS idx_agents_calendar_sync_enabled ON agents(calendar_sync_enabled) WHERE calendar_sync_enabled = true;
 
+

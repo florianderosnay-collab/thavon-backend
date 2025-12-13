@@ -8,3 +8,4 @@ CREATE INDEX IF NOT EXISTS idx_leads_preferred_language ON leads(preferred_langu
 -- Add comment
 COMMENT ON COLUMN leads.preferred_language IS 'ISO 639-1 language code (e.g., en, fr, de, es) for multi-language call support';
 
+

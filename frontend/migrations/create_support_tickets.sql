@@ -66,3 +66,4 @@ CREATE TRIGGER update_support_tickets_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+

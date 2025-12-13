@@ -58,3 +58,4 @@ CREATE TRIGGER update_call_retries_updated_at_column
   FOR EACH ROW
   EXECUTE FUNCTION update_call_retries_updated_at();
 
+

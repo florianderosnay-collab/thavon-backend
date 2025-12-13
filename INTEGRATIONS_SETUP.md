@@ -89,3 +89,4 @@ NEXT_PUBLIC_BASE_URL=https://your-domain.com
 4. Add webhook signature validation for each provider
 5. Create sync jobs to periodically pull leads from connected CRMs
 
+

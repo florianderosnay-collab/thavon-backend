@@ -66,3 +66,4 @@ If you're still stuck, tell me:
 2. What error message do you see (if any)?
 3. Can you take a screenshot of what you see in Supabase?
 
+

@@ -55,7 +55,20 @@ export async function POST(req: NextRequest) {
     const { data: callLog, error: callError } = await supabaseAdmin
       .from("call_logs")
       .select(`
-        *,
+        id,
+        agency_id,
+        lead_id,
+        agent_id,
+        vapi_call_id,
+        status,
+        duration_seconds,
+        recording_url,
+        transcript,
+        summary,
+        language,
+        metadata,
+        created_at,
+        updated_at,
         leads:lead_id (name, phone_number, address),
         agents:agent_id (name, email)
       `)

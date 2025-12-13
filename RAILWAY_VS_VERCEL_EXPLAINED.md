@@ -85,3 +85,4 @@ After setting up `app.thavon.io`:
 3. Check browser console (F12) for any API errors
 4. If you see CORS errors or connection errors, the Railway URL might be wrong
 
+

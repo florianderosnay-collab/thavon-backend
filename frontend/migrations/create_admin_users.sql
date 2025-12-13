@@ -61,3 +61,4 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION is_admin(UUID) TO authenticated;
 
+

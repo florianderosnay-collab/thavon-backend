@@ -79,3 +79,4 @@ After fixing, the logs should show:
 
 **Note:** The code now makes real API calls (not mocked), so the key must be valid for calls to work.
 
+
