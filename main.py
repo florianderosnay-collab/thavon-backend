@@ -747,12 +747,26 @@ def process_outbound_calls(leads: list):
                 "model": {
                     "provider": "openai",
                     "model": "gpt-4o",
-                    "systemPrompt": f"You are a Senior Agent calling {lead_name} about their property. Book an appointment."
+                    "systemPrompt": f"You are a Senior Agent calling {lead_name} about their property. Your goal is to book an appointment for a viewing. Be friendly and professional.",
+                    "functions": [
+                        {
+                            "name": "bookAppointment",
+                            "description": "Book an appointment when the lead agrees to a viewing",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "time": {"type": "string", "description": "Appointment time (e.g., 'Tomorrow at 2pm', 'Friday at 10am')"},
+                                    "notes": {"type": "string", "description": "Any notes about the appointment"}
+                                },
+                                "required": ["time"]
+                            }
+                        }
+                    ]
                 },
                 "voice": { 
                     "provider": "cartesia", 
                     "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
-                    "model": "sonic-english"  # Match old working code structure
+                    "model": "sonic-english"
                 }
             },
             "metadata": {
