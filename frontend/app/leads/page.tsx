@@ -84,7 +84,8 @@ export default function LeadsPage() {
           lead.name?.toLowerCase().includes(query) ||
           lead.phone_number?.toLowerCase().includes(query) ||
           lead.address?.toLowerCase().includes(query) ||
-          lead.email?.toLowerCase().includes(query)
+          lead.email?.toLowerCase().includes(query) ||
+          lead.metadata?.email?.toLowerCase().includes(query)
       );
     }
 
@@ -116,19 +117,26 @@ export default function LeadsPage() {
       .filter(Boolean)
       .join(", ");
 
+    // Build metadata with optional fields
+    const metadata: any = {
+      property_type: formData.propertyType,
+      notes: formData.notes,
+    };
+    
+    // Store email in metadata if provided (since email column may not exist in schema)
+    if (formData.email) {
+      metadata.email = formData.email;
+    }
+
     const leadData = {
       agency_id: agencyId,
       name: fullName,
       phone_number: formData.phone || "",
-      email: formData.email || null,
       address: fullAddress || formData.address || "",
       asking_price: formData.propertyValue || "0",
       status: "new",
       source: formData.leadSource || "manual",
-      metadata: {
-        property_type: formData.propertyType,
-        notes: formData.notes,
-      },
+      metadata: metadata,
     };
 
     const { error } = await supabase.from("leads").insert(leadData);
@@ -303,18 +311,25 @@ export default function LeadsPage() {
 
           const fullAddress = [address, city, state, zip].filter(Boolean).join(", ") || address;
 
+          // Build metadata object with optional fields
+          const metadata: any = {
+            property_type: propertyType,
+          };
+          
+          // Store email in metadata if provided (since email column may not exist in schema)
+          if (email) {
+            metadata.email = email;
+          }
+
           return {
             agency_id: agencyId,
             name: name || "Unknown Lead",
             phone_number: phone.toString().trim(),
-            email: email || null,
             address: fullAddress,
             asking_price: propertyValue.toString().replace(/[€,$,\s]/g, "") || "0",
             status: "new",
             source: leadSource,
-            metadata: {
-              property_type: propertyType,
-            },
+            metadata: metadata,
           };
         })
         .filter(Boolean);
@@ -513,8 +528,8 @@ export default function LeadsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-slate-600">{lead.phone_number || "-"}</div>
-                          {lead.email && (
-                            <div className="text-xs text-slate-400">{lead.email}</div>
+                          {(lead.email || lead.metadata?.email) && (
+                            <div className="text-xs text-slate-400">{lead.email || lead.metadata?.email}</div>
                           )}
                         </td>
                         <td className="px-6 py-4">
