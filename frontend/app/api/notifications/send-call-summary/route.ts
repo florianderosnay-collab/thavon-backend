@@ -132,9 +132,14 @@ export async function POST(req: NextRequest) {
       ? `${Math.floor(callLog.duration_seconds / 60)}:${(callLog.duration_seconds % 60).toString().padStart(2, "0")}`
       : "N/A";
 
-    const leadName = callLog.leads?.name || "Unknown Lead";
-    const leadPhone = callLog.leads?.phone_number || "N/A";
-    const agentName = callLog.agents?.name || "Unassigned";
+    // Handle relationship queries - TypeScript infers arrays, but foreign keys return single objects
+    const callLogData: any = callLog;
+    const leadsData = callLogData?.leads;
+    const agentsData = callLogData?.agents;
+    
+    const leadName = (Array.isArray(leadsData) ? leadsData[0]?.name : leadsData?.name) || "Unknown Lead";
+    const leadPhone = (Array.isArray(leadsData) ? leadsData[0]?.phone_number : leadsData?.phone_number) || "N/A";
+    const agentName = (Array.isArray(agentsData) ? agentsData[0]?.name : agentsData?.name) || "Unassigned";
     const agencyName = "Your Agency"; // Agencies table doesn't have a name column
 
     // Email subject
@@ -257,11 +262,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Send to assigned agent (if different from owner)
-    if (callLog.agents?.email && callLog.agents.email !== ownerEmail) {
+    const agentEmail = Array.isArray(agentsData) ? agentsData[0]?.email : agentsData?.email;
+    if (agentEmail && agentEmail !== ownerEmail) {
       emailPromises.push(
         sendEmailViaResend(
           resendApiKey,
-          callLog.agents.email,
+          agentEmail,
           subject,
           emailHtml
         )
