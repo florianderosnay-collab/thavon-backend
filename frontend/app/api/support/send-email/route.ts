@@ -70,7 +70,7 @@ export async function POST(req: Request) {
                   <h3>Message:</h3>
                   <p style="white-space: pre-wrap;">${ticket.message}</p>
                 </div>
-                <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'https://thavon.vercel.app'}/admin/support" class="button">
+                <a href="${process.env.NEXT_PUBLIC_BASE_URL || 'https://app.thavon.io'}/admin/support" class="button">
                   View in Admin Dashboard
                 </a>
               </div>

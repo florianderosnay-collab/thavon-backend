@@ -99,7 +99,7 @@ export default function IntegrationsDocsPage() {
                     <p className="text-sm text-slate-600">
                       Go to the Integrations page and copy your unique webhook URL. It looks like:
                       <code className="block mt-2 p-2 bg-slate-50 rounded text-xs font-mono">
-                        https://thavon.vercel.app/api/webhooks/inbound/[your-agency-id]
+                        https://app.thavon.io/api/webhooks/inbound/[your-agency-id]
                       </code>
                     </p>
                   </div>
@@ -235,12 +235,12 @@ export default function IntegrationsDocsPage() {
                     </p>
                     <div className="flex items-center gap-2 bg-slate-50 p-2 rounded">
                       <code className="flex-1 text-xs font-mono">
-                        https://thavon.vercel.app/api/integrations/callback/hubspot
+                        https://app.thavon.io/api/integrations/callback/hubspot
                       </code>
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => copyToClipboard("https://thavon.vercel.app/api/integrations/callback/hubspot", "hubspot-redirect")}
+                        onClick={() => copyToClipboard("https://app.thavon.io/api/integrations/callback/hubspot", "hubspot-redirect")}
                         className="h-8 w-8"
                       >
                         {copied === "hubspot-redirect" ? (
@@ -342,7 +342,7 @@ export default function IntegrationsDocsPage() {
                     </p>
                     <p className="text-sm text-slate-600 mb-2">Configure:</p>
                     <ul className="list-disc list-inside ml-4 space-y-1 text-sm text-slate-600">
-                      <li><strong>Callback URL:</strong> <code className="bg-slate-50 px-1 rounded">https://thavon.vercel.app/api/integrations/callback/salesforce</code></li>
+                      <li><strong>Callback URL:</strong> <code className="bg-slate-50 px-1 rounded">https://app.thavon.io/api/integrations/callback/salesforce</code></li>
                       <li><strong>OAuth Scopes:</strong> <code className="bg-slate-50 px-1 rounded">api</code>, <code className="bg-slate-50 px-1 rounded">refresh_token</code>, <code className="bg-slate-50 px-1 rounded">offline_access</code></li>
                     </ul>
                   </div>
@@ -528,7 +528,7 @@ export default function IntegrationsDocsPage() {
               <h3 className="font-semibold text-slate-900 mb-3">OAuth Connection Fails</h3>
               <div className="bg-slate-50 p-4 rounded-lg space-y-2">
                 <p className="text-sm text-slate-700"><strong>Issue:</strong> "Redirect URL doesn't match"</p>
-                <p className="text-sm text-slate-700"><strong>Solution:</strong> Ensure the redirect URL in your OAuth app exactly matches: <code className="bg-white px-1 rounded">https://thavon.vercel.app/api/integrations/callback/[provider]</code></p>
+                <p className="text-sm text-slate-700"><strong>Solution:</strong> Ensure the redirect URL in your OAuth app exactly matches: <code className="bg-white px-1 rounded">https://app.thavon.io/api/integrations/callback/[provider]</code></p>
               </div>
             </div>
 

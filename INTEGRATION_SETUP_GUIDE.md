@@ -122,7 +122,7 @@ ADMIN_EMAIL=support@yourdomain.com
 NEXT_PUBLIC_CRISP_WEBSITE_ID=your-website-id-here
 
 # Base URL (for email links)
-NEXT_PUBLIC_BASE_URL=https://thavon.vercel.app
+NEXT_PUBLIC_BASE_URL=https://app.thavon.io
 ```
 
 ## Testing Checklist

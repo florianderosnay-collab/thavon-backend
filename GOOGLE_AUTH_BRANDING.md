@@ -46,7 +46,7 @@ After adding `thavon.io` as an authorized domain, the Google OAuth screen will s
 
 ⚠️ **Domain Must Match**:
 - The domain you add must match your actual website domain
-- If your site is at `thavon.vercel.app`, you might need to add that instead
+- If your site is at `app.thavon.io`, make sure that's what you add
 - Or set up a custom domain in Vercel to use `thavon.io`
 
 ## Alternative: Use Application Name

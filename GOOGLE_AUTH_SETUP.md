@@ -14,10 +14,10 @@ Google OAuth is redirecting to `localhost:3000` instead of your production URL. 
 3. Go to **Authentication** → **URL Configuration**
 4. Under **Redirect URLs**, add BOTH:
    - `http://localhost:3000/auth/callback` (for local development)
-   - `https://thavon.vercel.app/auth/callback` (for production - replace with your actual domain)
+   - `https://app.thavon.io/auth/callback` (for production)
 
 5. Under **Site URL**, set:
-   - Production: `https://thavon.vercel.app` (or your production domain)
+   - Production: `https://app.thavon.io`
    - Local: `http://localhost:3000`
 
 ### Step 2: Set Environment Variable
@@ -25,7 +25,7 @@ Google OAuth is redirecting to `localhost:3000` instead of your production URL. 
 Add to your `frontend/.env.local` (for local) and Vercel environment variables (for production):
 
 ```env
-NEXT_PUBLIC_BASE_URL=https://thavon.vercel.app
+NEXT_PUBLIC_BASE_URL=https://app.thavon.io
 ```
 
 **For local development**, you can either:
@@ -84,8 +84,8 @@ NEXT_PUBLIC_BASE_URL=https://thavon.vercel.app
 3. Try Google login - should work
 
 ### Production
-1. Make sure `https://thavon.vercel.app/auth/callback` is in Supabase redirect URLs
-2. Set `NEXT_PUBLIC_BASE_URL=https://thavon.vercel.app` in Vercel
+1. Make sure `https://app.thavon.io/auth/callback` is in Supabase redirect URLs
+2. Set `NEXT_PUBLIC_BASE_URL=https://app.thavon.io` in Vercel
 3. Deploy and test
 
 ## Common Issues
