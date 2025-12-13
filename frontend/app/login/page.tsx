@@ -22,8 +22,8 @@ export default function LoginPage() {
   });
 
   const validatePassword = (pwd: string): { valid: boolean; error?: string } => {
-    if (pwd.length < 6 || pwd.length > 8) {
-      return { valid: false, error: "Password must be between 6 and 8 characters" };
+    if (pwd.length < 6) {
+      return { valid: false, error: "Password must be at least 6 characters" };
     }
     if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)) {
       return { valid: false, error: "Password must contain at least one special character" };
@@ -34,7 +34,7 @@ export default function LoginPage() {
   const handlePasswordChange = (value: string) => {
     setPassword(value);
     setPasswordValidation({
-      length: value.length >= 6 && value.length <= 8,
+      length: value.length >= 6,
       special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value),
     });
   };
@@ -189,13 +189,12 @@ export default function LoginPage() {
                 <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
                 <Input 
                   type="password" 
-                  placeholder={isSignUp ? "Password (6-8 chars, 1 special)" : "••••••••"} 
+                  placeholder={isSignUp ? "Password (min 6 chars, 1 special)" : "••••••••"} 
                   className="pl-10 h-11 bg-slate-50 border-slate-200"
                   value={password}
                   onChange={(e) => handlePasswordChange(e.target.value)}
                   required
                   minLength={6}
-                  maxLength={8}
                 />
               </div>
               {isSignUp && password && (
@@ -206,7 +205,7 @@ export default function LoginPage() {
                     ) : (
                       <XCircle className="w-4 h-4" />
                     )}
-                    <span>6-8 characters</span>
+                    <span>Minimum 6 characters</span>
                   </div>
                   <div className={`flex items-center gap-2 ${passwordValidation.special ? 'text-green-600' : 'text-slate-500'}`}>
                     {passwordValidation.special ? (

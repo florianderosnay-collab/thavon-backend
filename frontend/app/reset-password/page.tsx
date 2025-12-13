@@ -83,8 +83,8 @@ function ResetPasswordContent() {
   }, []);
 
   const validatePassword = (pwd: string): string | null => {
-    if (pwd.length < 6 || pwd.length > 8) {
-      return "Password must be between 6 and 8 characters";
+    if (pwd.length < 6) {
+      return "Password must be at least 6 characters";
     }
     if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)) {
       return "Password must contain at least one special character";
@@ -232,7 +232,7 @@ function ResetPasswordContent() {
           <CardDescription>
             {step === "request"
               ? "Enter your email and we'll send you a reset link"
-              : "Enter your new password (6-8 characters with at least one special character)"}
+              : "Enter your new password (minimum 6 characters with at least one special character)"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -258,13 +258,12 @@ function ResetPasswordContent() {
                   <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
                   <Input
                     type="password"
-                    placeholder="New password (6-8 chars, 1 special)"
+                    placeholder="New password (min 6 chars, 1 special)"
                     className="pl-10 h-11 bg-slate-50 border-slate-200"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={6}
-                    maxLength={8}
                   />
                 </div>
                 <div className="relative">
@@ -277,11 +276,10 @@ function ResetPasswordContent() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     minLength={6}
-                    maxLength={8}
                   />
                 </div>
                 <p className="text-xs text-slate-500">
-                  Password must be 6-8 characters with at least one special character
+                  Password must be at least 6 characters with at least one special character
                 </p>
               </>
             )}
