@@ -206,18 +206,172 @@ def push_to_followup_boss(fub_key: str, lead_name: str, lead_phone: str, summary
 
 def trigger_vapi_call(payload):
     """Executes the Vapi API Call in the background."""
+    # #region agent log
+    try:
+        with open(log_path, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "call-debug",
+                "hypothesisId": "A",
+                "location": "main.py:trigger_vapi_call:entry",
+                "message": "trigger_vapi_call called",
+                "data": {
+                    "customer_name": payload.get('customer', {}).get('name', 'unknown'),
+                    "has_vapi_key": VAPI_Private_Key is not None,
+                    "vapi_key_length": len(VAPI_Private_Key) if VAPI_Private_Key else 0,
+                    "payload_keys": list(payload.keys()),
+                },
+                "timestamp": int(time.time() * 1000)
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        pass
+    # #endregion
+    
     print(f"   -> VAPI CALLER: Executing call for {payload['customer']['name']}")
     try:
-        headers = { "Authorization": f"Bearer {VAPI_Private_Key}", "Content-Type": "application/json" }
-        # Simulate a real call API endpoint (Vapi handles the call)
-        # response = requests.post("https://api.vapi.ai/call/phone", headers=headers, json=payload)
-        # print(f"   -> Vapi API Response: {response.status_code}")
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "call-debug",
+                    "hypothesisId": "B",
+                    "location": "main.py:trigger_vapi_call:before_api_call",
+                    "message": "Before Vapi API call",
+                    "data": {
+                        "vapi_key_set": VAPI_Private_Key is not None,
+                        "phone_number_id": payload.get('phoneNumberId', 'missing'),
+                        "api_url": "https://api.vapi.ai/call/phone",
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            pass
+        # #endregion
         
-        # MOCK CALL SUCCESS & POST-CALL WEBHOOK DATA
-        # Simulate that Vapi finished the call and sent the summary back to our server
-        return True
+        if not VAPI_Private_Key:
+            # #region agent log
+            try:
+                with open(log_path, "a") as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "call-debug",
+                        "hypothesisId": "C",
+                        "location": "main.py:trigger_vapi_call:no_key",
+                        "message": "VAPI_API_KEY missing",
+                        "data": {},
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception as e:
+                pass
+            # #endregion
+            print("❌ VAPI_API_KEY not configured")
+            return False
+        
+        headers = { "Authorization": f"Bearer {VAPI_Private_Key}", "Content-Type": "application/json" }
+        
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "call-debug",
+                    "hypothesisId": "D",
+                    "location": "main.py:trigger_vapi_call:api_request",
+                    "message": "Making Vapi API request",
+                    "data": {
+                        "url": "https://api.vapi.ai/call/phone",
+                        "payload_size": len(json.dumps(payload)),
+                        "has_phone_number_id": "phoneNumberId" in payload,
+                        "phone_number_id_value": payload.get('phoneNumberId', 'missing'),
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            pass
+        # #endregion
+        
+        # Make actual Vapi API call
+        response = requests.post("https://api.vapi.ai/call/phone", headers=headers, json=payload, timeout=30)
+        
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "call-debug",
+                    "hypothesisId": "E",
+                    "location": "main.py:trigger_vapi_call:api_response",
+                    "message": "Vapi API response received",
+                    "data": {
+                        "status_code": response.status_code,
+                        "response_text": response.text[:200] if response.text else "empty",
+                        "success": response.status_code in [200, 201],
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            pass
+        # #endregion
+        
+        print(f"   -> Vapi API Response: {response.status_code}")
+        
+        if response.status_code in [200, 201]:
+            response_data = response.json() if response.text else {}
+            print(f"   -> ✅ Call initiated: {response_data.get('id', 'unknown')}")
+            return True
+        else:
+            print(f"   -> ❌ Vapi API Error: {response.status_code} - {response.text}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "call-debug",
+                    "hypothesisId": "F",
+                    "location": "main.py:trigger_vapi_call:exception",
+                    "message": "Vapi API request exception",
+                    "data": {
+                        "error_type": type(e).__name__,
+                        "error_message": str(e)[:200],
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e2:
+            pass
+        # #endregion
+        print(f"❌ Vapi Call Failed: {e}")
+        return False
     except Exception as e:
-        print(f"Vapi Call Failed: {e}")
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "call-debug",
+                    "hypothesisId": "G",
+                    "location": "main.py:trigger_vapi_call:general_exception",
+                    "message": "General exception in trigger_vapi_call",
+                    "data": {
+                        "error_type": type(e).__name__,
+                        "error_message": str(e)[:200],
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e2:
+            pass
+        # #endregion
+        print(f"❌ Vapi Call Failed: {e}")
         return False
 
 
@@ -230,16 +384,53 @@ def process_outbound_calls(leads: list):
         
         print(f"   -> Dialing: {lead_name} ({lead_phone})")
         
-        # 1. BUILD VAPI PAYLOAD (Simplified Mock)
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "call-debug",
+                    "hypothesisId": "H",
+                    "location": "main.py:process_outbound_calls:building_payload",
+                    "message": "Building Vapi payload for outbound call",
+                    "data": {
+                        "lead_name": lead_name,
+                        "lead_phone": lead_phone,
+                        "agency_id": agency_id,
+                        "vapi_phone_number_id": os.environ.get("VAPI_PHONE_NUMBER_ID"),
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            pass
+        # #endregion
+        
+        # 1. BUILD VAPI PAYLOAD
+        phone_number_id = os.environ.get("VAPI_PHONE_NUMBER_ID")
+        if not phone_number_id:
+            print(f"   -> ⚠️ WARNING: VAPI_PHONE_NUMBER_ID not set, call may fail")
+        
         vapi_payload = {
-            "phoneNumberId": "YOUR_TWILIO_PHONE_ID_FROM_VAPI", 
+            "phoneNumberId": phone_number_id or "YOUR_TWILIO_PHONE_ID_FROM_VAPI",
             "customer": { "number": lead_phone, "name": lead_name },
             "assistant": {
-                # ... (Simplified Assistant for demo)
-                "model": { "provider": "groq", "model": "llama-3-70b-versatile" },
+                "model": { 
+                    "provider": "groq", 
+                    "model": "llama-3-70b-versatile" 
+                },
                 "systemPrompt": f"You are a Senior Agent calling {lead_name} about their property. Book an appointment.",
-                "voice": { "provider": "cartesia", "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d" },
+                "voice": { 
+                    "provider": "cartesia", 
+                    "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d" 
+                },
             },
+            "metadata": {
+                "agency_id": agency_id,
+                "lead_id": lead.get('id'),
+                "is_outbound": True
+            },
+            "webhookUrl": f"{os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')}/api/webhooks/vapi"
         }
         
         # 2. TRIGGER THE CALL
@@ -459,6 +650,27 @@ async def start_campaign(request: CampaignRequest, background_tasks: BackgroundT
     Prioritizes queued_night leads (from outside office hours) before new leads.
     Also processes call retries.
     """
+    # #region agent log
+    try:
+        with open(log_path, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "call-debug",
+                "hypothesisId": "I",
+                "location": "main.py:start_campaign:entry",
+                "message": "start_campaign endpoint called",
+                "data": {
+                    "agency_id": request.agency_id,
+                    "has_vapi_key": VAPI_Private_Key is not None,
+                    "vapi_phone_number_id": os.environ.get("VAPI_PHONE_NUMBER_ID"),
+                },
+                "timestamp": int(time.time() * 1000)
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        pass
+    # #endregion
+    
     agency_id = request.agency_id
     
     # 1. Process call retries first (unanswered calls)
@@ -486,6 +698,27 @@ async def start_campaign(request: CampaignRequest, background_tasks: BackgroundT
         lead_ids = [lead['id'] for lead in queued_leads]
         supabase.table('leads').update({'status': 'new'}).in_('id', lead_ids).execute()
         print(f"📞 Processing {len(queued_leads)} queued night leads + {len(new_leads)} new leads")
+    
+    # #region agent log
+    try:
+        with open(log_path, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "call-debug",
+                "hypothesisId": "J",
+                "location": "main.py:start_campaign:before_background_task",
+                "message": "About to start background task for calls",
+                "data": {
+                    "leads_count": len(leads),
+                    "queued_count": len(queued_leads),
+                    "new_count": len(new_leads),
+                },
+                "timestamp": int(time.time() * 1000)
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        pass
+    # #endregion
     
     # 6. Loop and Call in the background
     background_tasks.add_task(process_outbound_calls, leads)
