@@ -31,6 +31,27 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch call log with related data
+    // #region agent log
+    const querySelect = `
+      *,
+      leads:lead_id (name, phone_number, address),
+      agents:agent_id (name, email)
+    `;
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'send-call-summary/route.ts:before-query',
+        message: 'About to query call log',
+        data: { callLogId, querySelect },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'notification-check',
+        hypothesisId: 'A'
+      })
+    }).catch(() => {});
+    // #endregion
+    
     const { data: callLog, error: callError } = await supabaseAdmin
       .from("call_logs")
       .select(`
@@ -40,6 +61,28 @@ export async function POST(req: NextRequest) {
       `)
       .eq("id", callLogId)
       .single();
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'send-call-summary/route.ts:after-query',
+        message: 'Query result',
+        data: { 
+          hasError: !!callError,
+          errorCode: callError?.code,
+          errorMessage: callError?.message,
+          hasCallLog: !!callLog,
+          callLogId: callLog?.id
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'notification-check',
+        hypothesisId: 'A'
+      })
+    }).catch(() => {});
+    // #endregion
 
     if (callError || !callLog) {
       console.error("❌ Error fetching call log:", callError);
