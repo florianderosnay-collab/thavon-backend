@@ -1,4 +1,19 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+// Use admin client to bypass RLS
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+// Import client for user auth
 import { supabase } from "@/lib/supabaseClient";
 
 /**
@@ -32,8 +47,8 @@ export async function GET(req: Request) {
 
     const agencyId = member.agency_id;
 
-    // Fetch recent activity from call_logs (more reliable than lead status)
-    const { data: recentCalls, error: callsError } = await supabase
+    // Fetch recent activity from call_logs (use admin client to bypass RLS)
+    const { data: recentCalls, error: callsError } = await supabaseAdmin
       .from("call_logs")
       .select(`
         id,
@@ -41,14 +56,14 @@ export async function GET(req: Request) {
         status,
         duration_seconds,
         created_at,
-        leads (name, phone_number, address)
+        lead_id
       `)
       .eq("agency_id", agencyId)
       .order("created_at", { ascending: false })
       .limit(10);
     
     // Also fetch recent leads with activity
-    const { data: recentLeads, error: leadsError } = await supabase
+    const { data: recentLeads, error: leadsError } = await supabaseAdmin
       .from("leads")
       .select("id, name, phone_number, address, status, metadata, created_at, updated_at")
       .eq("agency_id", agencyId)
@@ -64,12 +79,21 @@ export async function GET(req: Request) {
       .order("updated_at", { ascending: false })
       .limit(10);
 
+    // Get lead data for call activities
+    const leadIds = (recentCalls || []).map((c: any) => c.lead_id).filter(Boolean);
+    const { data: leadsForCalls } = await supabaseAdmin
+      .from("leads")
+      .select("id, name, phone_number, address")
+      .in("id", leadIds);
+    
+    const leadsMap = new Map((leadsForCalls || []).map((l: any) => [l.id, l]));
+    
     // Combine call logs and lead activities
     const callActivities = (recentCalls || []).map((call: any) => {
-      const leadData = call.leads || {};
+      const leadData = leadsMap.get(call.lead_id) || {};
       return {
         id: call.id,
-        type: call.status === "completed" ? "success" : "neutral",
+        type: call.status === "completed" ? "success" as const : "neutral" as const,
         title: `Call ${call.status}`,
         description: `${leadData.name || "Unknown"} - ${leadData.phone_number || ""}`,
         time: new Date(call.created_at).toLocaleString(),
