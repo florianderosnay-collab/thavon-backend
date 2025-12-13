@@ -54,8 +54,13 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Skip middleware for auth callback route and onboarding (needs to be accessible without auth)
-  if (request.nextUrl.pathname === '/auth/callback' || request.nextUrl.pathname === '/onboarding') {
+  // Skip middleware for auth callback route, onboarding, and reset password (needs to be accessible without auth)
+  if (
+    request.nextUrl.pathname === '/auth/callback' || 
+    request.nextUrl.pathname === '/onboarding' ||
+    request.nextUrl.pathname === '/reset-password' ||
+    request.nextUrl.pathname.startsWith('/reset-password')
+  ) {
     return response
   }
 

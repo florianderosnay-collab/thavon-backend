@@ -21,6 +21,12 @@ function ResetPasswordContent() {
   const [step, setStep] = useState<"request" | "reset">("request");
 
   useEffect(() => {
+    // Check for token in URL hash (Supabase uses hash fragments for password reset)
+    const hash = window.location.hash;
+    if (hash.includes("access_token") || hash.includes("type=recovery")) {
+      setStep("reset");
+    }
+    // Also check query params as fallback
     const token = searchParams.get("token");
     if (token) {
       setStep("reset");
@@ -42,15 +48,32 @@ function ResetPasswordContent() {
     setLoading(true);
     setError("");
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:40',message:'Requesting password reset',data:{email,baseUrl:process.env.NEXT_PUBLIC_BASE_URL || window.location.origin},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+
     try {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+      const redirectUrl = `${baseUrl}/reset-password`;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:48',message:'Calling resetPasswordForEmail',data:{email,redirectUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${baseUrl}/reset-password`,
+        redirectTo: redirectUrl,
       });
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:54',message:'Reset password response',data:{hasError:!!error,errorMessage:error?.message,errorCode:error?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
 
       if (error) throw error;
       setSuccess(true);
     } catch (err: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:60',message:'Reset password error',data:{errorMessage:err?.message,errorStack:err?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       setError(err.message || "Failed to send reset email");
     } finally {
       setLoading(false);
@@ -76,14 +99,19 @@ function ResetPasswordContent() {
     }
 
     try {
-      const token = searchParams.get("token");
-      if (!token) {
-        throw new Error("Invalid reset link");
-      }
+      // Supabase password reset doesn't require a token parameter
+      // The session is automatically established from the hash fragment
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:78',message:'Resetting password',data:{hasHash:!!window.location.hash,hashLength:window.location.hash.length},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
 
       const { error } = await supabase.auth.updateUser({
         password: password,
       });
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:85',message:'Password update result',data:{hasError:!!error,errorMessage:error?.message,errorCode:error?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'G'})}).catch(()=>{});
+      // #endregion
 
       if (error) throw error;
 

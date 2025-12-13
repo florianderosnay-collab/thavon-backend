@@ -66,6 +66,13 @@ export async function GET(request: NextRequest) {
     // #endregion
     
     if (!exchangeError && data?.session) {
+      // Check if this is a password reset flow (check for recovery type)
+      const recoveryType = searchParams.get("type");
+      if (recoveryType === "recovery") {
+        // Password reset - redirect to reset password page
+        return NextResponse.redirect(`${origin}/reset-password`)
+      }
+
       // Check if user needs onboarding (no agency membership)
       const { createClient } = await import("@supabase/supabase-js");
       const supabaseAdmin = createClient(
@@ -77,7 +84,7 @@ export async function GET(request: NextRequest) {
         .from("agency_members")
         .select("agency_id")
         .eq("user_id", data.session.user.id)
-        .single();
+        .maybeSingle();
 
       // Redirect to onboarding if no agency membership, otherwise use the original redirect
       const finalRedirect = member ? next : "/onboarding";
@@ -89,7 +96,7 @@ export async function GET(request: NextRequest) {
       });
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:68',message:'Redirecting after success',data:{redirectTo:`${origin}${finalRedirect}`,hasMember:!!member,needsOnboarding:!member},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:75',message:'Redirecting after success',data:{redirectTo:`${origin}${finalRedirect}`,hasMember:!!member,needsOnboarding:!member},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
       return finalResponse
     } else {

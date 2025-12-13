@@ -230,7 +230,13 @@ export default function LoginPage() {
               <div className="text-right">
                 <Link
                   href="/reset-password"
-                  className="text-sm text-violet-600 hover:underline font-medium"
+                  className="text-sm text-violet-600 hover:underline font-medium cursor-pointer"
+                  onClick={(e) => {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'login/page.tsx:229',message:'Forgot password link clicked',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'A'})}).catch(()=>{});
+                    // #endregion
+                    console.log("Forgot password link clicked");
+                  }}
                 >
                   Forgot password?
                 </Link>

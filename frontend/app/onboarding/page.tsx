@@ -32,11 +32,20 @@ export default function OnboardingPage() {
     setLoading(true);
     setError("");
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'onboarding/page.tsx:30',message:'Starting onboarding submission',data:{formData},timestamp:Date.now(),sessionId:'debug-session',runId:'onboarding',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+
     try {
       // Get the authenticated user
       const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'onboarding/page.tsx:38',message:'User fetch result',data:{hasUser:!!user,userId:user?.id?.substring(0,8),hasError:!!userError,errorMessage:userError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'onboarding',hypothesisId:'G'})}).catch(()=>{});
+      // #endregion
+
       if (userError || !user) {
-        throw new Error("You must be logged in to complete onboarding");
+        throw new Error("You must be logged in to complete onboarding. Please log in first.");
       }
 
       // Create agency
@@ -51,7 +60,18 @@ export default function OnboardingPage() {
         .select()
         .single();
 
-      if (agencyError) throw agencyError;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'onboarding/page.tsx:50',message:'Agency creation result',data:{hasAgency:!!agency,agencyId:agency?.id?.substring(0,8),hasError:!!agencyError,errorMessage:agencyError?.message,errorCode:agencyError?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'onboarding',hypothesisId:'H'})}).catch(()=>{});
+      // #endregion
+
+      if (agencyError) {
+        console.error("Agency creation error:", agencyError);
+        throw new Error(agencyError.message || "Failed to create agency. Please try again.");
+      }
+
+      if (!agency) {
+        throw new Error("Failed to create agency. Please try again.");
+      }
 
       // Link user to agency
       const { error: memberError } = await supabase
@@ -62,10 +82,19 @@ export default function OnboardingPage() {
           role: "owner",
         });
 
-      if (memberError) throw memberError;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'onboarding/page.tsx:65',message:'Member creation result',data:{hasError:!!memberError,errorMessage:memberError?.message,errorCode:memberError?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'onboarding',hypothesisId:'I'})}).catch(()=>{});
+      // #endregion
+
+      if (memberError) {
+        console.error("Member creation error:", memberError);
+        // If member creation fails, try to clean up the agency
+        await supabase.from("agencies").delete().eq("id", agency.id);
+        throw new Error(memberError.message || "Failed to link your account. Please try again.");
+      }
 
       // Update user metadata with full name
-      await supabase.auth.updateUser({
+      const { error: updateError } = await supabase.auth.updateUser({
         data: {
           first_name: formData.firstName,
           last_name: formData.lastName,
@@ -74,11 +103,28 @@ export default function OnboardingPage() {
         },
       });
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'onboarding/page.tsx:82',message:'User update result',data:{hasError:!!updateError,errorMessage:updateError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'onboarding',hypothesisId:'J'})}).catch(()=>{});
+      // #endregion
+
+      if (updateError) {
+        console.warn("User metadata update error (non-critical):", updateError);
+        // Non-critical, continue anyway
+      }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'onboarding/page.tsx:90',message:'Onboarding complete, redirecting',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'onboarding',hypothesisId:'K'})}).catch(()=>{});
+      // #endregion
+
       // Redirect to dashboard
       router.push("/");
       router.refresh();
     } catch (err: any) {
-      setError(err.message || "Failed to complete onboarding");
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'onboarding/page.tsx:95',message:'Onboarding error',data:{errorMessage:err?.message,errorStack:err?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'onboarding',hypothesisId:'L'})}).catch(()=>{});
+      // #endregion
+      console.error("Onboarding error:", err);
+      setError(err.message || "Failed to complete onboarding. Please try again.");
       setLoading(false);
     }
   };
