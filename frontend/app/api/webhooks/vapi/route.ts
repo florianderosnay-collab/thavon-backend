@@ -39,6 +39,24 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // #region agent log
+  try {
+    await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'route.ts:POST:entry',
+        message: 'Frontend webhook received request',
+        data: { hasBody: !!req.body },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'webhook-receive',
+        hypothesisId: 'H2'
+      })
+    }).catch(() => {});
+  } catch {}
+  // #endregion
+
   try {
     // 1. Verify webhook signature (if Vapi provides one)
     const signature = req.headers.get("x-vapi-signature");
@@ -60,6 +78,29 @@ export async function POST(req: NextRequest) {
     const payload = await req.json();
     const eventType = payload.type || payload.event; // Vapi may use either
     
+    // #region agent log
+    try {
+      await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'route.ts:POST:parsed',
+          message: 'Event type identified',
+          data: {
+            eventType,
+            hasCall: !!payload.call,
+            callId: payload.call?.id || payload.callId,
+            callStatus: payload.call?.status || payload.status,
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          runId: 'webhook-receive',
+          hypothesisId: 'H2'
+        })
+      }).catch(() => {});
+    } catch {}
+    // #endregion
+    
     console.log(`📞 Vapi Webhook: ${eventType}`, {
       callId: payload.call?.id || payload.callId,
       status: payload.call?.status || payload.status,
@@ -69,6 +110,23 @@ export async function POST(req: NextRequest) {
     switch (eventType) {
       case "end-of-call-report":
       case "call-status-update":
+        // #region agent log
+        try {
+          await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'route.ts:POST:handleCallUpdate',
+              message: 'Calling handleCallUpdate',
+              data: { eventType },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'webhook-receive',
+              hypothesisId: 'H3'
+            })
+          }).catch(() => {});
+        } catch {}
+        // #endregion
         await handleCallUpdate(payload);
         break;
       
@@ -76,12 +134,72 @@ export async function POST(req: NextRequest) {
         await handleFunctionCall(payload);
         break;
       
+      case "speech-update":
+      case "conversation-update":
+        // #region agent log
+        try {
+          await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'route.ts:POST:handleCallUpdate-speech',
+              message: 'Handling speech/conversation update as call update',
+              data: { eventType, hasCall: !!payload.call },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'webhook-receive',
+              hypothesisId: 'H2'
+            })
+          }).catch(() => {});
+        } catch {}
+        // #endregion
+        // Treat speech/conversation updates as call updates
+        await handleCallUpdate(payload);
+        break;
+      
       default:
+        // #region agent log
+        try {
+          await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'route.ts:POST:unhandled',
+              message: 'Unhandled event type in frontend',
+              data: { eventType },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'webhook-receive',
+              hypothesisId: 'H2'
+            })
+          }).catch(() => {});
+        } catch {}
+        // #endregion
         console.log(`⚠️ Unhandled Vapi event type: ${eventType}`);
     }
 
     return NextResponse.json({ status: "ok" }, { status: 200 });
   } catch (error: any) {
+    // #region agent log
+    try {
+      await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'route.ts:POST:error',
+          message: 'Exception in webhook handler',
+          data: {
+            errorType: error?.constructor?.name,
+            errorMessage: error?.message?.substring(0, 200),
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          runId: 'webhook-receive',
+          hypothesisId: 'H3'
+        })
+      }).catch(() => {});
+    } catch {}
+    // #endregion
     console.error("❌ Vapi webhook error:", error);
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
@@ -94,6 +212,28 @@ export async function POST(req: NextRequest) {
  * Handle call status updates and end-of-call reports
  */
 async function handleCallUpdate(payload: any) {
+  // #region agent log
+  try {
+    await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'route.ts:handleCallUpdate:entry',
+        message: 'Processing call update',
+        data: {
+          hasCall: !!payload.call,
+          callId: payload.call?.id || payload.callId,
+          callStatus: payload.call?.status || payload.status,
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'webhook-process',
+        hypothesisId: 'H3'
+      })
+    }).catch(() => {});
+  } catch {}
+  // #endregion
+
   const call = payload.call || payload;
   const callId = call.id || call.callId;
   const status = call.status || "completed";
@@ -104,7 +244,47 @@ async function handleCallUpdate(payload: any) {
   const leadId = metadata.lead_id || metadata.leadId;
   const agentId = metadata.agent_id || metadata.agentId;
 
+  // #region agent log
+  try {
+    await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'route.ts:handleCallUpdate:metadata',
+        message: 'Extracted metadata',
+        data: {
+          agencyId: agencyId || 'MISSING',
+          leadId: leadId || null,
+          agentId: agentId || null,
+          hasMetadata: !!metadata,
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'webhook-process',
+        hypothesisId: 'H3'
+      })
+    }).catch(() => {});
+  } catch {}
+  // #endregion
+
   if (!agencyId) {
+    // #region agent log
+    try {
+      await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'route.ts:handleCallUpdate:missing-agency',
+          message: 'Missing agency_id - aborting',
+          data: { metadataKeys: Object.keys(metadata) },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          runId: 'webhook-process',
+          hypothesisId: 'H3'
+        })
+      }).catch(() => {});
+    } catch {}
+    // #endregion
     console.error("❌ Missing agency_id in call metadata");
     return;
   }
@@ -129,6 +309,31 @@ async function handleCallUpdate(payload: any) {
   }
 
   // Upsert call log
+  // #region agent log
+  try {
+    await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'route.ts:handleCallUpdate:before-upsert',
+        message: 'About to upsert call log',
+        data: {
+          callId,
+          agencyId,
+          leadId: leadId || null,
+          callStatus,
+          hasTranscript: !!transcript,
+          hasRecording: !!recordingUrl,
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'webhook-process',
+        hypothesisId: 'H3'
+      })
+    }).catch(() => {});
+  } catch {}
+  // #endregion
+
   const { data: callLog, error } = await supabaseAdmin
     .from("call_logs")
     .upsert(
@@ -157,6 +362,29 @@ async function handleCallUpdate(payload: any) {
     )
     .select()
     .single();
+
+  // #region agent log
+  try {
+    await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'route.ts:handleCallUpdate:after-upsert',
+        message: 'Upsert result',
+        data: {
+          hasError: !!error,
+          errorMessage: error?.message?.substring(0, 200) || null,
+          hasCallLog: !!callLog,
+          callLogId: callLog?.id || null,
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'webhook-process',
+        hypothesisId: 'H3'
+      })
+    }).catch(() => {});
+  } catch {}
+  // #endregion
 
   if (error) {
     console.error("❌ Error saving call log:", error);

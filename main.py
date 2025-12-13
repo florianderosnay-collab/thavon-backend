@@ -1004,11 +1004,51 @@ async def assistant_request(request: Request):
         if message_type == 'assistant-request' or event_type == 'assistant-request':
             # ASSISTANT REQUEST: Return dynamic assistant configuration
             return await handle_assistant_request(payload, message)
-        elif event_type in ['status-update', 'call-status-update', 'end-of-call-report', 'transcript-update', 'function-call', 'hang']:
+        elif event_type in ['status-update', 'call-status-update', 'end-of-call-report', 'transcript-update', 'function-call', 'hang', 'speech-update', 'conversation-update']:
             # WEBHOOK EVENTS: Forward to frontend webhook endpoint
+            # #region agent log
+            try:
+                with open(log_path, "a") as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "event-routing",
+                        "hypothesisId": "H1",
+                        "location": "main.py:assistant_request:forwarding",
+                        "message": "Routing webhook event to frontend",
+                        "data": {
+                            "event_type": event_type,
+                            "message_type": message_type,
+                            "has_call_data": "call" in str(payload) or "callId" in str(payload),
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except:
+                pass
+            # #endregion
             return await forward_to_webhook(payload, event_type)
         else:
             # Unknown event type - log and acknowledge
+            # #region agent log
+            try:
+                with open(log_path, "a") as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "event-routing",
+                        "hypothesisId": "H1",
+                        "location": "main.py:assistant_request:unknown",
+                        "message": "Unknown event type - NOT forwarding",
+                        "data": {
+                            "event_type": event_type,
+                            "message_type": message_type,
+                            "payload_keys": list(payload.keys()) if payload else [],
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except:
+                pass
+            # #endregion
             print(f"⚠️ Unknown Vapi event type: {event_type or message_type}")
             return {"status": "acknowledged"}
             
@@ -1097,6 +1137,27 @@ async def forward_to_webhook(payload: dict, event_type: str):
     webhook_url = os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')
     frontend_webhook = f"{webhook_url}/api/webhooks/vapi"
     
+    # #region agent log
+    try:
+        with open(log_path, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "webhook-forward",
+                "hypothesisId": "H5",
+                "location": "main.py:forward_to_webhook:entry",
+                "message": "Attempting to forward webhook",
+                "data": {
+                    "event_type": event_type,
+                    "frontend_url": frontend_webhook,
+                    "payload_size": len(str(payload)),
+                },
+                "timestamp": int(time.time() * 1000)
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except:
+        pass
+    # #endregion
+    
     print(f"📤 Forwarding {event_type} event to frontend webhook: {frontend_webhook}")
     
     try:
@@ -1114,13 +1175,13 @@ async def forward_to_webhook(payload: dict, event_type: str):
                 log_entry = {
                     "sessionId": "debug-session",
                     "runId": "webhook-forward",
-                    "hypothesisId": "WEBHOOK_FORWARD",
-                    "location": "main.py:forward_to_webhook",
-                    "message": f"Forwarded {event_type} to frontend",
+                    "hypothesisId": "H5",
+                    "location": "main.py:forward_to_webhook:response",
+                    "message": f"Frontend webhook response received",
                     "data": {
                         "event_type": event_type,
-                        "frontend_url": frontend_webhook,
                         "status_code": response.status_code,
+                        "response_text": response.text[:500] if response.text else None,
                     },
                     "timestamp": int(time.time() * 1000)
                 }
@@ -1144,12 +1205,13 @@ async def forward_to_webhook(payload: dict, event_type: str):
                 log_entry = {
                     "sessionId": "debug-session",
                     "runId": "webhook-forward-error",
-                    "hypothesisId": "WEBHOOK_FORWARD_ERROR",
+                    "hypothesisId": "H5",
                     "location": "main.py:forward_to_webhook:error",
-                    "message": "Error forwarding webhook",
+                    "message": "Exception during webhook forwarding",
                     "data": {
                         "event_type": event_type,
-                        "error": str(e)[:200],
+                        "error_type": type(e).__name__,
+                        "error": str(e)[:500],
                     },
                     "timestamp": int(time.time() * 1000)
                 }
