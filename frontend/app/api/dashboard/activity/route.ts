@@ -178,7 +178,12 @@ export async function GET(req: Request) {
       };
     });
 
-    return NextResponse.json({ activities });
+    // Sort all activities by timestamp
+    const allActivities = [...callActivities, ...leadActivities].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    return NextResponse.json({ activities: allActivities });
   } catch (error: any) {
     console.error("Activity fetch error:", error);
     return NextResponse.json(
