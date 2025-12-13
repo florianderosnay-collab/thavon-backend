@@ -131,14 +131,22 @@ export default function LeadsPage() {
       finalAddress = finalAddress ? `${finalAddress} - ${formData.notes}` : formData.notes;
     }
 
+    // Build address with all extra info since metadata/source columns don't exist
+    const addressParts: string[] = [];
+    if (fullAddress || formData.address) addressParts.push(fullAddress || formData.address);
+    if (formData.propertyType) addressParts.push(`Type: ${formData.propertyType}`);
+    if (formData.leadSource && formData.leadSource !== "manual") addressParts.push(`Source: ${formData.leadSource}`);
+    if (formData.notes) addressParts.push(`Notes: ${formData.notes}`);
+    
+    const finalAddressWithExtras = addressParts.length > 0 ? addressParts.join(" | ") : "";
+
     const leadData: any = {
       agency_id: agencyId,
       name: fullName,
       phone_number: formData.phone || "",
-      address: finalAddress,
+      address: finalAddressWithExtras,
       asking_price: formData.propertyValue || "0",
       status: "new",
-      source: formData.leadSource || "manual",
     };
 
     const { error } = await supabase.from("leads").insert(leadData);
@@ -314,21 +322,32 @@ export default function LeadsPage() {
           const fullAddress = [address, city, state, zip].filter(Boolean).join(", ") || address;
 
           // Build lead data - only include fields that exist in the schema
-          // Note: metadata column may not exist, so we store extra info in address or skip it
+          // Based on working code in main.py and webhooks, the schema has:
+          // agency_id, name, phone_number, address, status, asking_price
+          let finalAddress = fullAddress;
+          
+          // Append extra info to address since metadata/source columns don't exist
+          const addressParts: string[] = [];
+          if (fullAddress) addressParts.push(fullAddress);
+          if (propertyType) addressParts.push(`Type: ${propertyType}`);
+          if (leadSource && leadSource !== "imported") addressParts.push(`Source: ${leadSource}`);
+          
+          if (addressParts.length > 0) {
+            finalAddress = addressParts.join(" | ");
+          }
+
           const leadData: any = {
             agency_id: agencyId,
             name: name || "Unknown Lead",
             phone_number: phone.toString().trim(),
-            address: fullAddress,
+            address: finalAddress || "",
             asking_price: propertyValue.toString().replace(/[€,$,\s]/g, "") || "0",
             status: "new",
-            source: leadSource,
           };
           
-          // If property type exists, append it to address (since metadata column may not exist)
-          if (propertyType) {
-            leadData.address = fullAddress ? `${fullAddress} (${propertyType})` : propertyType;
-          }
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'leads/page.tsx:318-333',message:'Lead data structure before insert',data:{leadDataKeys:Object.keys(leadData),hasSource:!!leadData.source,hasMetadata:!!leadData.metadata},timestamp:Date.now(),sessionId:'debug-session',runId:'import-leads',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
 
           return leadData;
         })
@@ -539,7 +558,11 @@ export default function LeadsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(lead.status || "new")}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-slate-600 capitalize">{lead.source || "manual"}</span>
+                          <span className="text-sm text-slate-600">
+                            {lead.address?.includes("Source:") 
+                              ? lead.address.split("Source:")[1]?.split("|")[0]?.trim() || "manual"
+                              : "manual"}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
                           <button
