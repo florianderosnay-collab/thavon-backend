@@ -57,9 +57,16 @@ export async function POST(req: Request) {
         );
       }
 
-      // Generate OAuth URL
-      const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/integrations/callback/${integrationId}`;
+      // Generate OAuth URL - use URL constructor to properly join URLs
+      const rawBaseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+      const baseUrlObj = new URL(rawBaseUrl);
+      // Construct redirect URI using URL constructor to avoid double slashes
+      const redirectUri = new URL(`/api/integrations/callback/${integrationId}`, baseUrlObj).toString();
       const state = Buffer.from(JSON.stringify({ agencyId, integrationId })).toString("base64");
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'connect/route.ts:61-63',message:'OAuth redirect URI construction',data:{rawBaseUrl,baseUrlOrigin:baseUrlObj.origin,redirectUri,integrationId},timestamp:Date.now(),sessionId:'debug-session',runId:'oauth-connect',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       
       const params = new URLSearchParams({
         client_id: process.env[`${integrationId.toUpperCase()}_CLIENT_ID`] || "",
@@ -70,6 +77,10 @@ export async function POST(req: Request) {
       });
 
       const authUrl = `${provider.authUrl}?${params.toString()}`;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'connect/route.ts:73',message:'Final OAuth auth URL',data:{authUrl,redirectUriInParams:params.get('redirect_uri')},timestamp:Date.now(),sessionId:'debug-session',runId:'oauth-connect',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
 
       return NextResponse.json({
         authUrl,

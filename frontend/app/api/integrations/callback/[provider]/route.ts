@@ -11,22 +11,35 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ provider: string }> }
 ) {
+  // Normalize base URL using URL constructor to avoid double slashes
+  const rawBaseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+  const baseUrlObj = new URL(rawBaseUrl);
+  const baseUrl = baseUrlObj.origin; // Get just the origin (protocol + host) to avoid trailing slash issues
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callback/route.ts:15',message:'Base URL normalization',data:{rawBaseUrl,baseUrl,baseUrlOrigin:baseUrlObj.origin},timestamp:Date.now(),sessionId:'debug-session',runId:'oauth-callback',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+  
   try {
     const { provider } = await params;
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
     const state = searchParams.get("state");
     const error = searchParams.get("error");
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callback/route.ts:20-22',message:'OAuth callback received',data:{provider,hasCode:!!code,hasState:!!state,error,requestUrl:req.url},timestamp:Date.now(),sessionId:'debug-session',runId:'oauth-callback',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
 
     if (error) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/integrations?error=${error}`
+        `${baseUrl}/integrations?error=${error}`
       );
     }
 
     if (!code || !state) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/integrations?error=missing_params`
+        `${baseUrl}/integrations?error=missing_params`
       );
     }
 
@@ -34,8 +47,12 @@ export async function GET(
     const stateData = JSON.parse(Buffer.from(state, "base64").toString());
     const { agencyId, integrationId } = stateData;
 
-    // Exchange code for access token
-    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/integrations/callback/${provider}`;
+    // Exchange code for access token - use URL constructor for proper joining
+    const redirectUri = new URL(`/api/integrations/callback/${provider}`, baseUrlObj).toString();
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callback/route.ts:41',message:'Redirect URI for token exchange',data:{redirectUri,baseUrl,provider,rawBaseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'oauth-callback',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     
     let tokenResponse;
     if (provider === "hubspot") {
@@ -68,7 +85,7 @@ export async function GET(
       });
     } else {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/integrations?error=unsupported_provider`
+        `${baseUrl}/integrations?error=unsupported_provider`
       );
     }
 
@@ -76,7 +93,7 @@ export async function GET(
       const errorData = await tokenResponse.text();
       console.error("Token exchange failed:", errorData);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/integrations?error=token_exchange_failed`
+        `${baseUrl}/integrations?error=token_exchange_failed`
       );
     }
 
@@ -109,18 +126,18 @@ export async function GET(
     if (dbError) {
       console.error("Database error:", dbError);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/integrations?error=storage_failed`
+        `${baseUrl}/integrations?error=storage_failed`
       );
     }
 
     // Redirect back to integrations page with success
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/integrations?success=${integrationId}`
+      `${baseUrl}/integrations?success=${integrationId}`
     );
   } catch (error: any) {
     console.error("OAuth callback error:", error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/integrations?error=callback_failed`
+      `${baseUrl}/integrations?error=callback_failed`
     );
   }
 }
