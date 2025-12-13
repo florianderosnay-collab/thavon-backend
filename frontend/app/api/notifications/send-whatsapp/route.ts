@@ -140,13 +140,14 @@ View full details: ${process.env.NEXT_PUBLIC_BASE_URL || "https://app.thavon.io"
     }
 
     // Send to assigned agent (if different from owner and has phone)
-    if (callLog.agents?.phone_number && callLog.agents.phone_number !== ownerPhone) {
+    const agentPhone = Array.isArray(agentsData) ? agentsData[0]?.phone_number : agentsData?.phone_number;
+    if (agentPhone && agentPhone !== ownerPhone) {
       sendPromises.push(
         sendWhatsAppMessage(
           twilioAccountSid,
           twilioAuthToken,
           twilioWhatsAppNumber,
-          callLog.agents.phone_number,
+          agentPhone,
           message
         )
       );
