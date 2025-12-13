@@ -1029,8 +1029,14 @@ async def assistant_request(request: Request):
             # ASSISTANT REQUEST: Return dynamic assistant configuration
             return await handle_assistant_request(payload, message)
         # Check if event should be forwarded
+        # Vapi may send event type in either payload.type, payload.event, or message.type
         webhook_events = ['status-update', 'call-status-update', 'end-of-call-report', 'transcript-update', 'function-call', 'hang', 'speech-update', 'conversation-update', 'assistant.started']
-        should_forward = event_type in webhook_events
+        # Check both event_type and message_type
+        should_forward = (event_type in webhook_events) or (message_type in webhook_events)
+        
+        # Debug print to Railway logs (always visible)
+        print(f"🔍 DEBUG: event_type={repr(event_type)}, message_type={repr(message_type)}, should_forward={should_forward}")
+        print(f"🔍 DEBUG: event_type in webhook_events = {event_type in webhook_events if event_type else False}")
         
         # #region agent log
         try:
@@ -1051,8 +1057,9 @@ async def assistant_request(request: Request):
                     "timestamp": int(time.time() * 1000)
                 }
                 f.write(json.dumps(log_entry) + "\n")
-        except:
-            pass
+        except Exception as log_err:
+            # If log file write fails, at least print to Railway logs
+            print(f"⚠️ Log write failed: {log_err}")
         # #endregion
         
         if should_forward:
@@ -1077,9 +1084,10 @@ async def assistant_request(request: Request):
             except:
                 pass
             # #endregion
-            return await forward_to_webhook(payload, event_type)
+            return await forward_to_webhook(payload, event_type or message_type)
         else:
             # Unknown event type - log and acknowledge
+            actual_event = event_type or message_type
             # #region agent log
             try:
                 with open(log_path, "a") as f:
@@ -1092,15 +1100,20 @@ async def assistant_request(request: Request):
                         "data": {
                             "event_type": event_type,
                             "message_type": message_type,
+                            "actual_event": actual_event,
                             "payload_keys": list(payload.keys()) if payload else [],
                         },
                         "timestamp": int(time.time() * 1000)
                     }
                     f.write(json.dumps(log_entry) + "\n")
-            except:
-                pass
+            except Exception as log_err:
+                print(f"⚠️ Log write failed: {log_err}")
             # #endregion
-            print(f"⚠️ Unknown Vapi event type: {event_type or message_type}")
+            print(f"⚠️ Unknown Vapi event type: {actual_event}")
+            print(f"🔍 DEBUG: event_type={repr(event_type)}, message_type={repr(message_type)}")
+            print(f"🔍 DEBUG: payload keys: {list(payload.keys()) if payload else []}")
+            if message:
+                print(f"🔍 DEBUG: message keys: {list(message.keys())}")
             return {"status": "acknowledged"}
             
     except Exception as e:
