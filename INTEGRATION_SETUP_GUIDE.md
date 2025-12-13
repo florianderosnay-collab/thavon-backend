@@ -74,7 +74,7 @@ This guide will help you set up the three new features: Admin Dashboard, Email N
 3. **Add to Environment Variables**
    - Add to `frontend/.env.local`:
      ```env
-     NEXT_PUBLIC_CRISP_WEBSITE_ID=your-website-id-here
+     NEXT_PUBLIC_CRISP_WEBSITE_ID=a74fbe4a-2fbc-43c4-a218-215f4110b72a
      ```
 
 4. **Deploy**

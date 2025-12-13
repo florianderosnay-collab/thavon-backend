@@ -4,6 +4,29 @@
 
 All hardcoded URLs have been updated from `thavon.vercel.app` to `app.thavon.io`:
 
+## 📋 Vercel Domain Management
+
+### Keep or Delete Old Domain?
+
+**Recommendation: KEEP for now, DELETE later**
+
+1. **Keep `thavon.vercel.app` active** (don't delete yet)
+   - Acts as a backup if something goes wrong
+   - Allows gradual migration
+   - No cost to keep it
+
+2. **After 1-2 weeks of successful operation**:
+   - Test that `app.thavon.io` works perfectly
+   - Verify all integrations work
+   - Then you can safely remove `thavon.vercel.app`
+
+3. **To remove later**:
+   - Go to Vercel → Settings → Domains
+   - Click "Remove" next to `thavon.vercel.app`
+   - Confirm deletion
+
+**Note**: You can also set up a redirect from `thavon.vercel.app` → `app.thavon.io` if you want, but it's not necessary.
+
 - [x] `frontend/app/api/support/send-email/route.ts` - Updated fallback URL
 - [x] `frontend/app/integrations/docs/page.tsx` - Updated all example URLs (5 places)
 - [x] `GOOGLE_AUTH_SETUP.md` - Updated documentation

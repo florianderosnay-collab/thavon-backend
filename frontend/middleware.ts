@@ -72,6 +72,23 @@ export async function middleware(request: NextRequest) {
      return NextResponse.redirect(new URL('/', request.url))
   }
 
+  // ADMIN ROUTE PROTECTION
+  // Protect /admin/* routes - only admins can access
+  if (user && request.nextUrl.pathname.startsWith('/admin')) {
+    // Check if user is an admin by querying admin_users table
+    const { data: adminUser, error: adminError } = await supabase
+      .from('admin_users')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .single()
+
+    // If user is not admin, redirect to dashboard
+    if (adminError || !adminUser) {
+      return NextResponse.redirect(new URL('/?error=admin-access-denied', request.url))
+    }
+  }
+
   return response
 }
 

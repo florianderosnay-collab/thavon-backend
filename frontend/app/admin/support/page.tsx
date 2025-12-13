@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import {
   Search, Filter, CheckCircle2, XCircle, Clock, 
   AlertCircle, MessageSquare, Mail, Phone, Calendar,
-  ChevronDown, ChevronUp, Eye, Edit
+  ChevronDown, ChevronUp, Eye, Edit, Loader2
 } from "lucide-react";
 
 interface SupportTicket {
@@ -54,40 +54,78 @@ export default function AdminSupportPage() {
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
+  // Check admin access on mount
   useEffect(() => {
-    fetchTickets();
+    const checkAdminAccess = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setIsAdmin(false);
+          setCheckingAccess(false);
+          return;
+        }
+
+        // Check if user is admin
+        const { data: adminUser, error } = await supabase
+          .from('admin_users')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .single();
+
+        if (error || !adminUser) {
+          setIsAdmin(false);
+          setCheckingAccess(false);
+          // Redirect to dashboard with error message
+          window.location.href = '/?error=admin-access-denied';
+          return;
+        }
+
+        setIsAdmin(true);
+        setCheckingAccess(false);
+        fetchTickets();
+      } catch (error) {
+        console.error('Error checking admin access:', error);
+        setIsAdmin(false);
+        setCheckingAccess(false);
+        window.location.href = '/?error=admin-access-denied';
+      }
+    };
+
+    checkAdminAccess();
   }, []);
 
   useEffect(() => {
-    filterTickets();
-  }, [searchQuery, statusFilter, priorityFilter, tickets]);
+    if (isAdmin) {
+      filterTickets();
+    }
+  }, [searchQuery, statusFilter, priorityFilter, tickets, isAdmin]);
 
   const fetchTickets = async () => {
+    if (!isAdmin) return; // Don't fetch if not admin
+    
     try {
       setLoading(true);
-      // Fetch all tickets (admin access - bypasses RLS with service role in API route)
-      const { data, error } = await supabase
-        .from("support_tickets")
-        .select(`
-          *,
-          agency:agencies(name)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error fetching tickets:", error);
-        // If direct access fails, use API route
-        const response = await fetch("/api/admin/support/tickets");
-        if (response.ok) {
-          const ticketsData = await response.json();
-          setTickets(ticketsData);
+      // Use API route which has admin authentication
+      const response = await fetch("/api/admin/support/tickets");
+      
+      if (!response.ok) {
+        if (response.status === 403) {
+          // Not authorized - redirect to dashboard
+          window.location.href = '/?error=admin-access-denied';
+          return;
         }
-      } else {
-        setTickets(data || []);
+        throw new Error(`Failed to fetch tickets: ${response.statusText}`);
       }
+
+      const ticketsData = await response.json();
+      setTickets(ticketsData || []);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error fetching tickets:", error);
+      alert("Failed to load support tickets. You may not have admin access.");
     } finally {
       setLoading(false);
     }
@@ -213,6 +251,40 @@ export default function AdminSupportPage() {
     resolved: tickets.filter((t) => t.status === "resolved").length,
     critical: tickets.filter((t) => t.priority === "critical").length,
   };
+
+  // Show loading state while checking admin access
+  if (checkingAccess) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="border-none shadow-sm bg-white">
+          <CardContent className="p-12 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-violet-600 mx-auto mb-4" />
+            <p className="text-slate-600">Verifying admin access...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show access denied if not admin
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="border-none shadow-sm bg-white">
+          <CardContent className="p-12 text-center">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
+            <p className="text-slate-600 mb-6">
+              You don't have permission to access the admin dashboard.
+            </p>
+            <Button onClick={() => window.location.href = '/'} className="bg-violet-600 hover:bg-violet-700 text-white">
+              Go to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
