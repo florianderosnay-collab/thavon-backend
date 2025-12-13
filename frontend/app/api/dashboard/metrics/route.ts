@@ -114,7 +114,7 @@ export async function GET(req: Request) {
       .gte("scheduled_at", new Date().toISOString()); // Only future/upcoming appointments
 
     // Get next appointment
-    const { data: nextAppointment } = await supabaseAdmin
+    const { data: nextAppointmentData } = await supabaseAdmin
       .from("appointments")
       .select(`
         scheduled_at,
@@ -129,14 +129,16 @@ export async function GET(req: Request) {
 
     // Format next appointment info
     let nextAppointmentText = "No upcoming appointments";
-    if (nextAppointment) {
-      const appointmentTime = (nextAppointment as any).scheduled_at;
+    if (nextAppointmentData) {
+      // Type assertion to handle Supabase query result type inference
+      const appointment: any = nextAppointmentData;
+      const appointmentTime = appointment?.scheduled_at;
       if (appointmentTime) {
         const date = new Date(appointmentTime);
         const day = date.toLocaleDateString('en-US', { weekday: 'short' });
         const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         // Handle leads as either object or array (Supabase relationship query)
-        const leadsData = (nextAppointment as any).leads;
+        const leadsData = appointment?.leads;
         const leadName = (Array.isArray(leadsData) ? leadsData[0]?.name : leadsData?.name) || "Lead";
         nextAppointmentText = `Next: ${day} ${time} with ${leadName}`;
       }
