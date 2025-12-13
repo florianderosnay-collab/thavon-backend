@@ -5,7 +5,7 @@ import axios from "axios";
 import { supabase } from "@/lib/supabaseClient"; 
 import { 
   Phone, Users, CalendarCheck, TrendingUp, Play, Activity,
-  History, CheckCircle2, Loader2
+  History, CheckCircle2, Loader2, Square
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -215,6 +215,16 @@ export default function Dashboard() {
     }
   };
 
+  const handleStopCampaign = () => {
+    // For now, just reload the page to break the UI loop
+    // In the future, this could call a /stop-campaign endpoint
+    if (confirm("Are you sure you want to stop the campaign? The page will reload.")) {
+      setLoading(false);
+      setStatus("System Standby");
+      window.location.reload();
+    }
+  };
+
   const isPro = agency?.subscription_status === 'active';
   const isTrial = agency?.subscription_status === 'free' && trialDaysLeft > 0;
   const isExpired = agency?.subscription_status === 'free' && trialDaysLeft <= 0;
@@ -328,20 +338,25 @@ export default function Dashboard() {
               {/* THE ACTION BUTTON (Conditional) */}
               <div className="flex flex-col gap-4">
                 {isReadyToHunt ? (
-                    // IF PAID OR TRIAL: Show the Start Button
-                    <Button 
-                        onClick={handleStartCampaign} 
-                        disabled={loading || !agency || !isReadyToHunt}
-                        className="w-full h-14 text-lg font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? (
-                        <span className="animate-pulse">Initializing Neural Network...</span>
-                        ) : (
-                        <>
-                            <Play className="w-5 h-5 fill-current" /> START HUNTING
-                        </>
-                        )}
-                    </Button>
+                    // IF PAID OR TRIAL: Show the Start/Stop Button
+                    loading ? (
+                      // Show STOP button when campaign is running
+                      <Button 
+                          onClick={handleStopCampaign} 
+                          className="w-full h-14 text-lg font-semibold bg-red-600 hover:bg-red-700 text-white shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+                      >
+                          <Square className="w-5 h-5 fill-current" /> STOP CAMPAIGN
+                      </Button>
+                    ) : (
+                      // Show START button when not running
+                      <Button 
+                          onClick={handleStartCampaign} 
+                          disabled={!agency || !isReadyToHunt}
+                          className="w-full h-14 text-lg font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                          <Play className="w-5 h-5 fill-current" /> START HUNTING
+                      </Button>
+                    )
                 ) : (
                     // IF EXPIRED: Show the Upgrade Button
                     <Button 
@@ -353,7 +368,7 @@ export default function Dashboard() {
                     </Button>
                 )}
                 
-                <p className={`text-center text-sm font-medium ${status.includes('Success') ? 'text-green-600' : 'text-slate-400'}`}>
+                <p className={`text-center text-sm font-medium ${status.includes('Success') ? 'text-green-600' : status.includes('Error') ? 'text-red-600' : 'text-slate-400'}`}>
                    {isReadyToHunt ? status : "Upgrade required to launch campaigns."}
                 </p>
               </div>
