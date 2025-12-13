@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 
 // YOUR RAILWAY URL (Used by the backend to trigger calls)
 const API_URL = "https://web-production-274e.up.railway.app"; 
@@ -47,6 +48,8 @@ export default function Dashboard() {
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [activities, setActivities] = useState<any[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [isCampaignActive, setIsCampaignActive] = useState(false);
 
   // 1. Fetch Agency Data and Check Trial on Load
   useEffect(() => {
@@ -152,6 +155,72 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Poll campaign progress when campaign is active
+  useEffect(() => {
+    if (!isCampaignActive || !agency) return;
+
+    const pollProgress = async () => {
+      try {
+        // Get user's agency membership to ensure we have agency_id
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: member } = await supabase
+          .from("agency_members")
+          .select("agency_id")
+          .eq("user_id", user.id)
+          .single();
+
+        if (!member) return;
+
+        const agencyId = member.agency_id;
+
+        // Count leads with status='called' (completed calls)
+        const { count: calledCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("agency_id", agencyId)
+          .eq("status", "called");
+
+        // Count leads with status='new' (pending calls)
+        const { count: newCount } = await supabase
+          .from("leads")
+          .select("*", { count: "exact", head: true })
+          .eq("agency_id", agencyId)
+          .eq("status", "new");
+
+        // Calculate progress: called vs (called + new)
+        const total = (calledCount || 0) + (newCount || 0);
+        
+        if (total === 0) {
+          // No leads to process, campaign is complete
+          setProgress(100);
+          setIsCampaignActive(false);
+          setStatus("Campaign Complete: All leads processed");
+          return;
+        }
+
+        const completed = calledCount || 0;
+        const calculatedProgress = Math.round((completed / total) * 100);
+        setProgress(calculatedProgress);
+
+        // If progress is 100% or no new leads remain, stop polling
+        if (calculatedProgress === 100 || (newCount || 0) === 0) {
+          setIsCampaignActive(false);
+          setStatus("Campaign Complete: All leads processed");
+        }
+      } catch (error) {
+        console.error("Error polling campaign progress:", error);
+      }
+    };
+
+    // Poll immediately, then every 3 seconds
+    pollProgress();
+    const interval = setInterval(pollProgress, 3000);
+
+    return () => clearInterval(interval);
+  }, [isCampaignActive, agency]);
+
   const handleStartCampaign = async () => {
     // Safety check: Ensure agency data is loaded
     if (!agency) {
@@ -176,6 +245,8 @@ export default function Dashboard() {
 
     setLoading(true);
     setStatus("Identifying Agency...");
+    setProgress(0);
+    setIsCampaignActive(true);
     
     try {
       setStatus("Initiating AI Agents...");
@@ -185,12 +256,14 @@ export default function Dashboard() {
       
       setStatus(`Success: ${response.data.message}`);
     } catch (error: any) {
-      console.error("Checkout Failed:", error);
+      console.error("Campaign Start Failed:", error);
       
-      const apiErrorMessage = error.response?.data?.error || "Unknown error occurred. Check Vercel Logs for /api/checkout.";
+      const apiErrorMessage = error.response?.data?.error || "Unknown error occurred.";
       
-      alert(`Could not initialize checkout. API Error: ${apiErrorMessage}`);
+      alert(`Could not start campaign. API Error: ${apiErrorMessage}`);
       setStatus(`Error: ${error.message || "Connection failed"}`);
+      setIsCampaignActive(false);
+      setProgress(0);
     }
     setLoading(false);
   };
@@ -220,6 +293,8 @@ export default function Dashboard() {
     // In the future, this could call a /stop-campaign endpoint
     if (confirm("Are you sure you want to stop the campaign? The page will reload.")) {
       setLoading(false);
+      setIsCampaignActive(false);
+      setProgress(0);
       setStatus("System Standby");
       window.location.reload();
     }
@@ -367,8 +442,20 @@ export default function Dashboard() {
                         🚀 UPGRADE TO PRO (€500/mo)
                     </Button>
                 )}
+
+                {/* Progress Bar - Only show when campaign is active */}
+                {isCampaignActive && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm font-medium text-slate-700">
+                        AI Agent is dialing... {progress}% complete
+                      </p>
+                    </div>
+                    <Progress value={progress} className="h-2" />
+                  </div>
+                )}
                 
-                <p className={`text-center text-sm font-medium ${status.includes('Success') ? 'text-green-600' : status.includes('Error') ? 'text-red-600' : 'text-slate-400'}`}>
+                <p className={`text-center text-sm font-medium ${status.includes('Success') ? 'text-green-600' : status.includes('Error') ? 'text-red-600' : status.includes('Complete') ? 'text-green-600' : 'text-slate-400'}`}>
                    {isReadyToHunt ? status : "Upgrade required to launch campaigns."}
                 </p>
               </div>
