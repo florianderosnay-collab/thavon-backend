@@ -314,8 +314,26 @@ async function handleCallUpdate(payload: any) {
   const transcript = message.transcript || call.transcript || call.recording?.transcript || "";
   const summary = message.summary || call.summary || call.recording?.summary || "";
   const recordingUrl = message.recordingUrl || message.stereoRecordingUrl || call.recording?.url || call.recordingUrl || "";
-  const duration = message.durationSeconds || call.duration || call.recording?.duration || 0;
+  // Convert duration to integer (database column is INTEGER, Vapi sends decimal)
+  const durationRaw = message.durationSeconds || call.duration || call.recording?.duration || 0;
+  const duration = Math.round(Number(durationRaw)) || 0;
   const language = call.language || metadata.language || "en";
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'route.ts:duration-conversion',
+      message: 'Duration conversion for database',
+      data: { durationRaw, duration, type: typeof durationRaw },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'A'
+    })
+  }).catch(() => {});
+  // #endregion
 
   // Determine call status
   let callStatus: string = "completed";
