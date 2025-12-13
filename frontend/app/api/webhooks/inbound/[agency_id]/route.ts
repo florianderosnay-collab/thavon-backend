@@ -120,6 +120,7 @@ export async function POST(
     const name = data.name || data.first_name || data.Name || "New Lead";
     const phone = data.phone || data.phone_number || data.Phone;
     const address = data.address || data.Address || "your inquiry";
+    const language = data.language || data.preferred_language || "en"; // Multi-language support
 
     if (!phone) {
       return NextResponse.json(
@@ -161,16 +162,21 @@ export async function POST(
       address: address,
       status: "calling_inbound",
       asking_price: "0", // Not relevant for inbound usually
+      preferred_language: language, // Store language preference
     };
 
-    const { error: leadError } = await supabaseAdmin
+    const { data: insertedLead, error: leadError } = await supabaseAdmin
       .from("leads")
-      .insert(leadData);
+      .insert(leadData)
+      .select()
+      .single();
 
     if (leadError) {
       console.error("❌ Failed to save lead:", leadError);
       // Continue anyway - don't block the call
     }
+
+    const leadId = insertedLead?.id || null;
 
     // 4. Build Inbound Vapi Call Payload
     const inboundPrompt = `
@@ -181,6 +187,9 @@ You are calling ${name} immediately because they just requested information abou
 # GOAL
 Confirm they made the request and ask if they are looking to buy or sell. 
 Your goal is to get a live agent on the line if they are serious.
+
+# LANGUAGE
+Speak in ${language} if the lead prefers it. Adjust your communication style accordingly.
 
 # OPENER
 "Hi ${name}, this is Thavon calling from the real estate team. I saw you just requested an estimate for ${address}. Do you have a minute?"
@@ -216,7 +225,15 @@ Your goal is to get a live agent on the line if they are serious.
           voiceId: "248be419-c632-4f23-adf1-5324ed7dbf1d",
         },
         firstMessage: `Hi ${name}, this is the real estate team calling about your request. Do you have a minute?`,
+        language: language, // Pass language to Vapi
       },
+      metadata: {
+        agency_id: agencyId,
+        lead_id: leadId,
+        language: language,
+        is_inbound: true,
+      },
+      webhookUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.thavon.io"}/api/webhooks/vapi`, // Webhook for call data
     };
 
     // 5. Trigger Vapi Call (Fire and forget - don't wait for response)

@@ -260,6 +260,85 @@ def process_outbound_calls(leads: list):
         time.sleep(1)
 
 
+# --- CALL RETRY LOGIC (NEW) ---
+
+def process_call_retries(agency_id: str):
+    """
+    Processes pending call retries for unanswered calls.
+    Checks the call_retries table for scheduled retries and triggers calls.
+    """
+    try:
+        # Get pending retries that are due (scheduled_at <= now)
+        now = datetime.now().isoformat()
+        retries_response = supabase.table('call_retries').select('*, leads:lead_id(*), call_logs:call_id(*)').eq('agency_id', agency_id).eq('status', 'pending').lte('scheduled_at', now).limit(10).execute()
+        
+        retries = retries_response.data or []
+        
+        if not retries:
+            print("   -> No pending retries to process")
+            return
+        
+        print(f"   -> Processing {len(retries)} call retries...")
+        
+        for retry in retries:
+            lead = retry.get('leads')
+            if not lead:
+                print(f"   -> ⚠️ Retry {retry['id']}: Lead not found, skipping")
+                continue
+            
+            lead_name = lead.get('name')
+            lead_phone = lead.get('phone_number')
+            lead_id = lead.get('id')
+            
+            print(f"   -> Retrying call to {lead_name} ({lead_phone}) - Attempt {retry['retry_count']}")
+            
+            # Build Vapi payload for retry
+            vapi_payload = {
+                "phoneNumberId": os.environ.get("VAPI_PHONE_NUMBER_ID", "YOUR_TWILIO_PHONE_ID_FROM_VAPI"),
+                "customer": { "number": lead_phone, "name": lead_name },
+                "assistant": {
+                    "model": { 
+                        "provider": "groq", 
+                        "model": "llama-3-70b-versatile" 
+                    },
+                    "systemPrompt": f"You are a Senior Agent calling {lead_name} about their property. This is a follow-up call. Book an appointment.",
+                    "voice": { 
+                        "provider": "cartesia", 
+                        "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d" 
+                    },
+                },
+                "metadata": {
+                    "agency_id": agency_id,
+                    "lead_id": lead_id,
+                    "is_retry": True,
+                    "retry_count": retry['retry_count']
+                }
+            }
+            
+            # Trigger the call
+            call_success = trigger_vapi_call(vapi_payload)
+            
+            if call_success:
+                # Mark retry as completed
+                supabase.table('call_retries').update({
+                    'status': 'completed',
+                    'completed_at': datetime.now().isoformat()
+                }).eq('id', retry['id']).execute()
+                print(f"   -> ✅ Retry call initiated for {lead_name}")
+            else:
+                # Mark retry as failed
+                supabase.table('call_retries').update({
+                    'status': 'failed'
+                }).eq('id', retry['id']).execute()
+                print(f"   -> ❌ Retry call failed for {lead_name}")
+            
+            # Small delay between retries
+            time.sleep(2)
+            
+    except Exception as e:
+        print(f"❌ Error processing call retries: {e}")
+
+
 # --- API ENDPOINTS ---
 
 # --- INBOUND ENGINE (SPEED-TO-LEAD) ---
@@ -278,11 +357,12 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
     name = data.get('name') or data.get('first_name') or data.get('Name') or "New Lead"
     phone = data.get('phone') or data.get('phone_number') or data.get('Phone')
     address = data.get('address') or data.get('Address') or "your inquiry"
+    language = data.get('language') or data.get('preferred_language') or 'en'  # NEW: Language support
     
     if not phone:
         return {"status": "ignored", "reason": "No phone number provided"}
 
-    print(f"🚀 INBOUND TRIGGER: Agency {agency_id} -> Lead {name} ({phone})")
+    print(f"🚀 INBOUND TRIGGER: Agency {agency_id} -> Lead {name} ({phone}) [Language: {language}]")
 
     # 2. Check Subscription (Security)
     # We query Supabase to make sure this agency is active
@@ -303,9 +383,11 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
         "phone_number": str(phone),
         "address": address,
         "status": lead_status,
-        "asking_price": "0" # Not relevant for inbound usually
+        "asking_price": "0", # Not relevant for inbound usually
+        "preferred_language": language  # NEW: Store language preference
     }
-    supabase.table('leads').insert(lead_data).execute()
+    lead_insert = supabase.table('leads').insert(lead_data).execute()
+    lead_id = lead_insert.data[0]['id'] if lead_insert.data else None
 
     # 5. TRIGGER THE CALL (Only if within office hours)
     if not is_office_hours:
@@ -322,13 +404,16 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
     Confirm they made the request and ask if they are looking to buy or sell. 
     Your goal is to get a live agent on the line if they are serious.
     
+    # LANGUAGE
+    Speak in {language} if the lead prefers it. Adjust your communication style accordingly.
+    
     # OPENER
     "Hi {name}, this is Thavon calling from the real estate team. I saw you just requested an estimate for {address}. Do you have a minute?"
     """
 
     call_payload = {
         # ... (Same structure as your existing outbound call, just different prompt)
-        "phoneNumberId": "YOUR_TWILIO_PHONE_ID_FROM_VAPI", 
+        "phoneNumberId": os.environ.get("VAPI_PHONE_NUMBER_ID", "YOUR_TWILIO_PHONE_ID_FROM_VAPI"), 
         "customer": { "number": str(phone), "name": name },
         "assistant": {
             "model": {
@@ -346,7 +431,15 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
             },
             "voice": { "provider": "cartesia", "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d" },
             "firstMessage": f"Hi {name}, this is the real estate team calling about your request. Do you have a minute?",
-        }
+            "language": language  # NEW: Pass language to Vapi
+        },
+        "metadata": {
+            "agency_id": agency_id,
+            "lead_id": lead_id,
+            "language": language,
+            "is_inbound": True
+        },
+        "webhookUrl": f"{os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')}/api/webhooks/vapi"  # NEW: Webhook URL for call data
     }
 
     # 6. Execute Call (in background so we reply to Zapier instantly)
@@ -364,36 +457,40 @@ async def start_campaign(request: CampaignRequest, background_tasks: BackgroundT
     """
     Fetches leads ONLY for the specific agency requesting the campaign.
     Prioritizes queued_night leads (from outside office hours) before new leads.
+    Also processes call retries.
     """
     agency_id = request.agency_id
     
-    # 1. Get Queued Night Leads First (Priority - from outside office hours)
+    # 1. Process call retries first (unanswered calls)
+    background_tasks.add_task(process_call_retries, agency_id)
+    
+    # 2. Get Queued Night Leads First (Priority - from outside office hours)
     queued_response = supabase.table('leads').select("*").eq('status', 'queued_night').eq('agency_id', agency_id).limit(5).execute()
     queued_leads = queued_response.data or []
     
-    # 2. Get New Leads (if we haven't reached the limit)
+    # 3. Get New Leads (if we haven't reached the limit)
     remaining_slots = 5 - len(queued_leads)
     new_leads = []
     if remaining_slots > 0:
         new_response = supabase.table('leads').select("*").eq('status', 'new').eq('agency_id', agency_id).limit(remaining_slots).execute()
         new_leads = new_response.data or []
     
-    # 3. Combine leads (queued_night first, then new)
+    # 4. Combine leads (queued_night first, then new)
     leads = queued_leads + new_leads
     
     if not leads:
         return {"message": "No leads found for your agency."}
     
-    # 4. Update queued_night leads to 'new' status so they're processed
+    # 5. Update queued_night leads to 'new' status so they're processed
     if queued_leads:
         lead_ids = [lead['id'] for lead in queued_leads]
         supabase.table('leads').update({'status': 'new'}).in_('id', lead_ids).execute()
         print(f"📞 Processing {len(queued_leads)} queued night leads + {len(new_leads)} new leads")
     
-    # 5. Loop and Call in the background
+    # 6. Loop and Call in the background
     background_tasks.add_task(process_outbound_calls, leads)
     
-    return {"message": f"Started calling {len(leads)} leads ({len(queued_leads)} queued + {len(new_leads)} new)."}
+    return {"message": f"Started calling {len(leads)} leads ({len(queued_leads)} queued + {len(new_leads)} new). Processing retries in background."}
 
 # Add a simple health check endpoint
 @app.get("/")

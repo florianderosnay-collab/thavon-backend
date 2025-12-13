@@ -189,20 +189,51 @@ async function handleFunctionCall(payload: any) {
   const leadId = metadata.lead_id || metadata.leadId;
   const agentId = metadata.agent_id || metadata.agentId;
 
-  if (functionName === "bookAppointment" && agencyId && leadId && agentId) {
+  if (functionName === "bookAppointment" && agencyId && leadId) {
     // Extract appointment details
     const scheduledAt = functionArgs.time || functionArgs.scheduled_at;
     const notes = functionArgs.notes || "";
 
     if (scheduledAt) {
-      await createAppointment({
-        agencyId,
-        leadId,
-        agentId,
-        scheduledAt,
-        notes,
-        callId: null, // Will be linked when call completes
-      });
+      // Assign agent if not provided
+      let assignedAgentId = agentId;
+      if (!assignedAgentId) {
+        const { assignAgentToLead } = await import("@/lib/agent-assignment");
+        const { data: lead } = await supabaseAdmin
+          .from("leads")
+          .select("id, address, agency_id")
+          .eq("id", leadId)
+          .single();
+        
+        if (lead) {
+          assignedAgentId = await assignAgentToLead(lead, scheduledAt);
+        }
+      }
+
+      if (assignedAgentId) {
+        await createAppointment({
+          agencyId,
+          leadId,
+          agentId: assignedAgentId,
+          scheduledAt,
+          notes,
+          callId: null, // Will be linked when call completes
+        });
+
+        // Create calendar event if agent has calendar sync
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+        fetch(`${baseUrl}/api/calendar/create-event`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agent_id: assignedAgentId,
+            lead_id: leadId,
+            scheduled_at: scheduledAt,
+            notes: notes,
+            title: `Appointment with ${lead?.name || "Lead"}`,
+          }),
+        }).catch((err) => console.error("Failed to create calendar event:", err));
+      }
     }
   }
 }
@@ -279,12 +310,11 @@ async function createAppointment(data: {
  * Send notifications to agency owner and assigned agent
  */
 async function sendCallNotifications(callLog: any) {
-  // This will be implemented in the notifications API
-  // For now, just log
   console.log(`📧 Sending notifications for call ${callLog.id}`);
   
   // Trigger notification API (async, don't wait)
-  fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/notifications/send-call-summary`, {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+  fetch(`${baseUrl}/api/notifications/send-call-summary`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ callLogId: callLog.id }),

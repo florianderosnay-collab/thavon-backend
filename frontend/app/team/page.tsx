@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Plus, Trash2, User, MapPin, Calendar, Phone } from "lucide-react";
+import { Plus, Trash2, User, MapPin, Calendar, Phone, CheckCircle2, XCircle, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,17 @@ export default function TeamPage() {
         }
     };
     init();
+
+    // Check for OAuth callback success/error messages
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("success") === "calendar_connected") {
+      alert("✅ Calendar connected successfully!");
+      window.history.replaceState({}, "", "/team");
+    } else if (urlParams.get("error")) {
+      const error = urlParams.get("error");
+      alert(`❌ Calendar connection failed: ${error}`);
+      window.history.replaceState({}, "", "/team");
+    }
   }, []);
 
   const fetchAgents = async (id: string) => {
@@ -75,6 +86,32 @@ export default function TeamPage() {
   const deleteAgent = async (id: string) => {
     await supabase.from("agents").delete().eq("id", id);
     setAgents(agents.filter(a => a.id !== id));
+  };
+
+  const connectCalendar = (agentId: string) => {
+    window.location.href = `/api/calendar/connect?agent_id=${agentId}`;
+  };
+
+  const disconnectCalendar = async (agentId: string) => {
+    if (!confirm("Are you sure you want to disconnect the calendar? This will stop automatic appointment syncing.")) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("agents")
+      .update({
+        calendar_sync_enabled: false,
+        google_calendar_access_token: null,
+        google_calendar_refresh_token: null,
+        google_calendar_expires_at: null,
+      })
+      .eq("id", agentId);
+
+    if (!error) {
+      fetchAgents(agencyId!);
+    } else {
+      alert("Error disconnecting calendar: " + error.message);
+    }
   };
 
   return (
@@ -136,7 +173,7 @@ export default function TeamPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-slate-900">{agent.name}</h3>
-                                    <div className="flex items-center gap-4 mt-1">
+                                    <div className="flex items-center gap-4 mt-1 flex-wrap">
                                         <div className="flex items-center gap-1 text-xs text-slate-500">
                                             <Phone className="w-3 h-3" /> {agent.phone_number}
                                         </div>
@@ -149,12 +186,44 @@ export default function TeamPage() {
                                                 <MapPin className="w-3 h-3" /> Global
                                             </div>
                                         )}
+                                        {agent.calendar_sync_enabled ? (
+                                            <div className="flex items-center gap-1 text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded">
+                                                <CheckCircle2 className="w-3 h-3" /> Calendar Connected
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                                                <XCircle className="w-3 h-3" /> No Calendar
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
-                            <button onClick={() => deleteAgent(agent.id)} className="text-slate-300 hover:text-red-500 transition-colors p-2">
-                                <Trash2 className="w-5 h-5" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {agent.calendar_sync_enabled ? (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => disconnectCalendar(agent.id)}
+                                        className="text-xs"
+                                    >
+                                        <XCircle className="w-3 h-3 mr-1" />
+                                        Disconnect Calendar
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => connectCalendar(agent.id)}
+                                        className="text-xs"
+                                    >
+                                        <Link2 className="w-3 h-3 mr-1" />
+                                        Connect Calendar
+                                    </Button>
+                                )}
+                                <button onClick={() => deleteAgent(agent.id)} className="text-slate-300 hover:text-red-500 transition-colors p-2">
+                                    <Trash2 className="w-5 h-5" />
+                                </button>
+                            </div>
                         </CardContent>
                     </Card>
                 ))}

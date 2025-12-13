@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient"; 
-import { LayoutDashboard, Users, Settings, LogOut, Briefcase, Phone } from "lucide-react"; // Import Briefcase and Phone
+import { LayoutDashboard, Users, Settings, LogOut, Briefcase, Phone, Calendar } from "lucide-react"; // Import Briefcase, Phone, and Calendar
 import { Link as LinkIcon } from "lucide-react"; // Import icon
 
 
@@ -11,6 +11,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Control Center", href: "/" }, // Changed: Dashboard -> Control Center
   { icon: Users, label: "Leads & Data", href: "/leads" }, // Changed: Leads -> Leads & Data
   { icon: Phone, label: "Call History", href: "/calls" }, // New: Call History
+  { icon: Calendar, label: "Appointments", href: "/appointments" }, // New: Appointments
   { icon: Briefcase, label: "Team Bullpen", href: "/team" }, // Changed: Team -> Team Bullpen
   { icon: Settings, label: "Agency Config", href: "/settings" }, // Changed: Settings -> Agency Config
   { icon: LinkIcon, label: "Integrations", href: "/integrations" }, // Keeping the new Integrations link
