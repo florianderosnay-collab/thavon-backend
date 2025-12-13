@@ -663,6 +663,7 @@ def process_outbound_calls(leads: list):
         lead_name = lead.get('name')
         lead_phone = lead.get('phone_number')
         agency_id = lead.get('agency_id')
+        lead_id = lead.get('id')
         
         print(f"   -> Dialing: {lead_name} ({lead_phone})")
         
@@ -732,7 +733,9 @@ def process_outbound_calls(leads: list):
         # #endregion
         
         # Build payload - SIMPLIFIED to match working version
-        # Remove webhookUrl and metadata if they're causing issues
+        # NOTE: webhookUrl causes 400 error - "property webhookUrl should not exist"
+        # webhookUrl must be configured in Vapi dashboard settings, not in the payload
+        # BUT metadata is REQUIRED for webhook processing - it contains agency_id and lead_id
         vapi_payload = {
             "phoneNumberId": phone_number_id or "YOUR_TWILIO_PHONE_ID_FROM_VAPI",
             "customer": { 
@@ -751,13 +754,13 @@ def process_outbound_calls(leads: list):
                     "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
                     "model": "sonic-english"  # Match old working code structure
                 }
+            },
+            "metadata": {
+                "agency_id": str(agency_id),
+                "lead_id": str(lead_id) if lead_id else None,
+                "is_inbound": False
             }
         }
-        
-        # NOTE: webhookUrl causes 400 error - "property webhookUrl should not exist"
-        # webhookUrl must be configured in Vapi dashboard settings, not in the payload
-        # metadata is optional and may also cause issues - removing for now
-        # vapi_payload["metadata"] = {...}  # Removed to avoid potential issues
         
         # 2. TRIGGER THE CALL
         call_success = trigger_vapi_call(vapi_payload)
@@ -929,7 +932,6 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
     """
 
     call_payload = {
-        # ... (Same structure as your existing outbound call, just different prompt)
         "phoneNumberId": os.environ.get("VAPI_PHONE_NUMBER_ID", "YOUR_TWILIO_PHONE_ID_FROM_VAPI"), 
         "customer": { "number": str(phone), "name": name },
         "assistant": {
@@ -942,12 +944,15 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
             "voice": { 
                 "provider": "cartesia", 
                 "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
-                "model": "sonic-english"  # Match old working code structure
+                "model": "sonic-english"
             }
         },
-        # NOTE: webhookUrl and metadata removed - webhookUrl causes 400 error
-        # webhookUrl must be configured in Vapi dashboard settings instead
-        # metadata may also cause issues, so removed for minimal payload
+        "metadata": {
+            "agency_id": str(agency_id),
+            "lead_id": str(lead_id) if lead_id else None,
+            "is_inbound": True
+        }
+        # NOTE: webhookUrl causes 400 error - must be configured in Vapi dashboard settings
     }
 
     # 6. Execute Call (in background so we reply to Zapier instantly)
