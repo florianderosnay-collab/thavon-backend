@@ -171,12 +171,27 @@ export async function POST(
       .select()
       .single();
 
+    let leadId: string | null = null;
     if (leadError) {
       console.error("❌ Failed to save lead:", leadError);
-      // Continue anyway - don't block the call
+      // Try to find existing lead by phone number as fallback
+      const { data: existingLead } = await supabaseAdmin
+        .from("leads")
+        .select("id")
+        .eq("phone_number", String(phone))
+        .eq("agency_id", agencyId)
+        .single();
+      
+      if (existingLead) {
+        leadId = existingLead.id;
+        console.log("✅ Found existing lead by phone number:", leadId);
+      } else {
+        console.warn("⚠️ No lead ID available for call tracking");
+        // Continue anyway - don't block the call, but metadata will be incomplete
+      }
+    } else {
+      leadId = insertedLead?.id || null;
     }
-
-    const leadId = insertedLead?.id || null;
 
     // 4. Build Inbound Vapi Call Payload
     const inboundPrompt = `
@@ -233,7 +248,7 @@ Speak in ${language} if the lead prefers it. Adjust your communication style acc
         language: language,
         is_inbound: true,
       },
-      webhookUrl: `${process.env.NEXT_PUBLIC_BASE_URL || "https://app.thavon.io"}/api/webhooks/vapi`, // Webhook for call data
+      // Note: webhookUrl must be configured in Vapi dashboard settings, not in API payload
     };
 
     // 5. Trigger Vapi Call (Fire and forget - don't wait for response)

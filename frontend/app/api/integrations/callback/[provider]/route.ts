@@ -115,7 +115,7 @@ export async function GET(
           token_type: tokenData.token_type,
           scope: tokenData.scope,
           // Salesforce returns instance_url in token response
-          instance_url: tokenData.instance_url || (provider === "salesforce" ? tokenData.instance_url : null),
+          instance_url: tokenData.instance_url || null,
         },
         status: "connected",
         connected_at: new Date().toISOString(),

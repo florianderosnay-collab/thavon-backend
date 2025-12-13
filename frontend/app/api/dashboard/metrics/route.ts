@@ -130,14 +130,13 @@ export async function GET(req: Request) {
     // Format next appointment info
     let nextAppointmentText = "No upcoming appointments";
     if (nextAppointment) {
-      const appointmentTime = nextAppointment.metadata?.appointment_time;
+      const appointmentTime = nextAppointment.scheduled_at;
       if (appointmentTime) {
         const date = new Date(appointmentTime);
         const day = date.toLocaleDateString('en-US', { weekday: 'short' });
         const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        nextAppointmentText = `Next: ${day} ${time}`;
-      } else {
-        nextAppointmentText = `Next: ${nextAppointment.name || "Appointment"}`;
+        const leadName = nextAppointment.leads?.name || "Lead";
+        nextAppointmentText = `Next: ${day} ${time} with ${leadName}`;
       }
     }
 
