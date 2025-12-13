@@ -46,8 +46,7 @@ export async function POST(req: NextRequest) {
       .select(`
         *,
         leads:lead_id (name, phone_number, address),
-        agents:agent_id (name, phone_number, email),
-        agencies:agency_id (name)
+        agents:agent_id (name, phone_number, email)
       `)
       .eq("id", callLogId)
       .single();

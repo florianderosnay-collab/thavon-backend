@@ -36,8 +36,7 @@ export async function POST(req: NextRequest) {
       .select(`
         *,
         leads:lead_id (name, phone_number, address),
-        agents:agent_id (name, email),
-        agencies:agency_id (name)
+        agents:agent_id (name, email)
       `)
       .eq("id", callLogId)
       .single();
@@ -80,7 +79,7 @@ export async function POST(req: NextRequest) {
     const leadName = callLog.leads?.name || "Unknown Lead";
     const leadPhone = callLog.leads?.phone_number || "N/A";
     const agentName = callLog.agents?.name || "Unassigned";
-    const agencyName = callLog.agencies?.name || "Your Agency";
+    const agencyName = "Your Agency"; // Agencies table doesn't have a name column
 
     // Email subject
     const subject = `Call Summary: ${leadName} - ${callDate}`;

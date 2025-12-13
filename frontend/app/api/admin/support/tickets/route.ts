@@ -76,8 +76,7 @@ export async function GET(request: Request) {
     const { data: tickets, error: ticketsError } = await supabaseAdmin
       .from("support_tickets")
       .select(`
-        *,
-        agency:agencies(name)
+        *
       `)
       .order("created_at", { ascending: false });
 
