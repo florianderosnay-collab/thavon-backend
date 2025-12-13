@@ -64,16 +64,20 @@ export async function GET(req: Request) {
       .order("updated_at", { ascending: false })
       .limit(10);
 
-    if (leadsError) {
-      console.error("Error fetching recent activity:", leadsError);
-      return NextResponse.json(
-        { error: "Failed to fetch activity" },
-        { status: 500 }
-      );
-    }
+    // Combine call logs and lead activities
+    const callActivities = (recentCalls || []).map((call: any) => {
+      const leadData = call.leads || {};
+      return {
+        id: call.id,
+        type: call.status === "completed" ? "success" : "neutral",
+        title: `Call ${call.status}`,
+        description: `${leadData.name || "Unknown"} - ${leadData.phone_number || ""}`,
+        time: new Date(call.created_at).toLocaleString(),
+        timestamp: call.created_at,
+      };
+    });
 
-    // Transform leads into activity items
-    const activities = (recentLeads || []).map((lead) => {
+    const leadActivities = (recentLeads || []).map((lead) => {
       // Determine activity type and title based on status
       let type: "success" | "neutral" | "system" = "neutral";
       let title = "";
