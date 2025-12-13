@@ -6,16 +6,21 @@ export async function GET(request: NextRequest) {
   fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:4',message:'Auth callback route hit',data:{url:request.url,method:request.method,hasUrl:!!request.url},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
 
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams, origin, hash } = new URL(request.url)
   const code = searchParams.get('code')
   const error = searchParams.get('error')
+  // Note: hash fragments are not available in server-side URL parsing
+  // They need to be handled client-side
   
   // #region agent log
   fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:10',message:'Auth callback params',data:{hasCode:!!code,code:code?.substring(0,10),error,origin,searchParams:Object.fromEntries(searchParams)},timestamp:Date.now(),sessionId:'debug-session',runId:'google-auth',hypothesisId:'B'})}).catch(()=>{});
   // #endregion
 
   // if "next" is in param, use it as the redirect URL
-  const next = searchParams.get('next') ?? '/'
+  // For password reset, check if the URL contains recovery indicators
+  const urlString = request.url;
+  const isPasswordResetFlow = urlString.includes("type=recovery") || urlString.includes("#type=recovery");
+  const next = isPasswordResetFlow ? '/reset-password' : (searchParams.get('next') ?? '/')
 
   // Create response object to set cookies on
   const response = NextResponse.redirect(`${origin}${next}`)
@@ -67,22 +72,27 @@ export async function GET(request: NextRequest) {
     
     if (!exchangeError && data?.session) {
       // Check if this is a password reset flow
-      // Supabase password reset links include type=recovery in the hash fragment
-      // We need to check the URL for this pattern
-      const url = new URL(request.url);
-      const hash = url.hash;
-      const isPasswordReset = hash.includes("type=recovery") || searchParams.get("type") === "recovery";
+      // Supabase password reset can be detected by checking the session metadata
+      // or by checking if the redirect URL contains recovery indicators
+      const urlString = request.url;
+      const isPasswordReset = 
+        urlString.includes("type=recovery") || 
+        urlString.includes("#type=recovery") ||
+        searchParams.get("type") === "recovery" ||
+        // Check session metadata for recovery type
+        (data.session as any)?.user?.recovery_sent_at;
       
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:68',message:'Checking password reset flow',data:{hasHash:!!hash,hashLength:hash.length,isPasswordReset,hasTypeParam:!!searchParams.get("type")},timestamp:Date.now(),sessionId:'debug-session',runId:'password-reset',hypothesisId:'J'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:68',message:'Checking password reset flow',data:{urlString:urlString.substring(0,200),isPasswordReset,hasTypeParam:!!searchParams.get("type"),typeParam:searchParams.get("type"),hasCode:!!code},timestamp:Date.now(),sessionId:'debug-session',runId:'password-reset',hypothesisId:'J'})}).catch(()=>{});
       // #endregion
 
       if (isPasswordReset) {
-        // Password reset - redirect to reset password page with hash preserved
+        // Password reset - redirect to reset password page
+        // Hash fragments will be preserved by the browser automatically
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:77',message:'Redirecting to reset password',data:{redirectTo:`${origin}/reset-password${hash}`},timestamp:Date.now(),sessionId:'debug-session',runId:'password-reset',hypothesisId:'K'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth/callback/route.ts:79',message:'Redirecting to reset password',data:{redirectTo:`${origin}/reset-password`},timestamp:Date.now(),sessionId:'debug-session',runId:'password-reset',hypothesisId:'K'})}).catch(()=>{});
         // #endregion
-        return NextResponse.redirect(`${origin}/reset-password${hash}`)
+        return NextResponse.redirect(`${origin}/reset-password`)
       }
 
       // Check if user needs onboarding (no agency membership)

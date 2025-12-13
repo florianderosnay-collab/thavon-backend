@@ -22,19 +22,56 @@ function ResetPasswordContent() {
 
   useEffect(() => {
     // Check for password reset token in URL hash (Supabase uses hash fragments)
-    const checkForResetToken = () => {
+    const checkForResetToken = async () => {
       const hash = window.location.hash;
+      const fullUrl = window.location.href;
+      
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:23',message:'Checking for reset token',data:{hasHash:!!hash,hashLength:hash.length,hashPreview:hash.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'H'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:23',message:'Checking for reset token',data:{hasHash:!!hash,hashLength:hash.length,hashPreview:hash.substring(0,100),fullUrl:fullUrl.substring(0,200),pathname:window.location.pathname,search:window.location.search},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'H'})}).catch(()=>{});
       // #endregion
 
-      if (hash && (hash.includes("access_token") || hash.includes("type=recovery"))) {
+      // Check if we have a hash with access_token or type=recovery
+      const hasResetToken = hash && (hash.includes("access_token") || hash.includes("type=recovery"));
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:33',message:'Hash check result',data:{hasResetToken,hashLength:hash?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'I1'})}).catch(()=>{});
+      // #endregion
+
+      // If we have hash, Supabase client will automatically process it
+      // Wait a moment for Supabase to establish the session from the hash
+      if (hasResetToken) {
+        // Give Supabase time to process the hash and establish session
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Check if user is authenticated (session should be established from hash)
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:42',message:'User check result',data:{hasResetToken,hasUser:!!user,userId:user?.id?.substring(0,8),hasError:!!userError,errorMessage:userError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'I'})}).catch(()=>{});
+      // #endregion
+
+      // If we have a reset token in hash OR user is authenticated, show reset form
+      if (hasResetToken || user) {
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:28',message:'Reset token found in hash',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'I'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:47',message:'Setting step to reset',data:{reason:hasResetToken ? 'hash-token' : 'authenticated-user',currentStep:'request'},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'J'})}).catch(()=>{});
         // #endregion
+        
+        // Force set step to reset immediately
         setStep("reset");
-        // Clear the hash from URL for cleaner UX
-        window.history.replaceState(null, "", window.location.pathname);
+        
+        // Clear the hash from URL after Supabase has processed it
+        if (hasResetToken) {
+          setTimeout(() => {
+            window.history.replaceState(null, "", window.location.pathname);
+          }, 2000);
+        }
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:58',message:'No reset token found, staying on request step',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'K'})}).catch(()=>{});
+        // #endregion
+        // Ensure we're on request step
+        setStep("request");
       }
     };
 
@@ -66,10 +103,12 @@ function ResetPasswordContent() {
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
+      // Redirect directly to reset-password page (not through auth/callback)
+      // Supabase will append hash fragments with the token
       const redirectUrl = `${baseUrl}/reset-password`;
       
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:48',message:'Calling resetPasswordForEmail',data:{email,redirectUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'C'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:68',message:'Calling resetPasswordForEmail',data:{email,redirectUrl,baseUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -193,7 +232,7 @@ function ResetPasswordContent() {
           <CardDescription>
             {step === "request"
               ? "Enter your email and we'll send you a reset link"
-              : "Enter your new password"}
+              : "Enter your new password (6-8 characters with at least one special character)"}
           </CardDescription>
         </CardHeader>
         <CardContent>
