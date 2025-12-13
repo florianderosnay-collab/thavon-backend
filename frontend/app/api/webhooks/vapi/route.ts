@@ -308,13 +308,6 @@ async function handleCallUpdate(payload: any) {
     });
     return;
   }
-  
-  console.log("✅ Processing call update", {
-    callId,
-    agencyId,
-    leadId,
-    status: callStatus,
-  });
 
   // Extract call data
   const transcript = call.transcript || call.recording?.transcript || "";
@@ -334,6 +327,15 @@ async function handleCallUpdate(payload: any) {
   } else if (status === "cancelled") {
     callStatus = "cancelled";
   }
+
+  console.log("✅ Processing call update", {
+    callId,
+    agencyId,
+    leadId,
+    status: callStatus,
+    hasRecording: !!recordingUrl,
+    hasTranscript: !!transcript,
+  });
 
   // Upsert call log
   // #region agent log
