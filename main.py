@@ -1198,7 +1198,13 @@ If they ask "What do you want?": Say "I saw your listing for {address} and wante
 
 async def forward_to_webhook(payload: dict, event_type: str):
     """Forward webhook events to the frontend webhook endpoint"""
+    # Get base URL and ensure it's correct
     webhook_url = os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')
+    # Remove trailing slash if present to avoid double slashes
+    webhook_url = webhook_url.rstrip('/')
+    # Ensure we're using the correct domain
+    if 'thavon.vercel.app' in webhook_url:
+        webhook_url = 'https://app.thavon.io'
     frontend_webhook = f"{webhook_url}/api/webhooks/vapi"
     
     # #region agent log
