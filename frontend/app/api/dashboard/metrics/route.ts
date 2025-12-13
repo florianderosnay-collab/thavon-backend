@@ -64,14 +64,22 @@ export async function GET(req: Request) {
       ? Math.round(((leadsThisWeek || 0) - leadsLastWeek) / leadsLastWeek * 100)
       : 0;
 
-    // 2. CALLS ATTEMPTED: Count leads with status indicating a call was made
-    // Statuses that indicate a call: 'called', 'calling_inbound', 'voicemail', 'appointment_booked', 'no_answer', etc.
-    const callStatuses = ['called', 'calling_inbound', 'voicemail', 'appointment_booked', 'no_answer', 'busy', 'callback'];
+    // 2. CALLS ATTEMPTED: Count from call_logs table (more accurate)
     const { count: callsAttempted, error: callsError } = await supabase
+      .from("call_logs")
+      .select("*", { count: "exact", head: true })
+      .eq("agency_id", agencyId);
+    
+    // Also count from leads with call statuses as fallback
+    const callStatuses = ['called', 'calling_inbound', 'voicemail', 'appointment_booked', 'no_answer', 'busy', 'callback'];
+    const { count: leadsWithCalls } = await supabase
       .from("leads")
       .select("*", { count: "exact", head: true })
       .eq("agency_id", agencyId)
       .in("status", callStatuses);
+    
+    // Use whichever is higher (in case some calls aren't reflected in lead status yet)
+    const totalCalls = Math.max(callsAttempted || 0, leadsWithCalls || 0);
 
     // Calculate connection rate (leads with appointments or successful calls / total calls)
     const { count: successfulCalls } = await supabase

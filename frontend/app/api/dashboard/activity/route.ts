@@ -32,7 +32,22 @@ export async function GET(req: Request) {
 
     const agencyId = member.agency_id;
 
-    // Fetch recent leads with activity (ordered by most recent)
+    // Fetch recent activity from call_logs (more reliable than lead status)
+    const { data: recentCalls, error: callsError } = await supabase
+      .from("call_logs")
+      .select(`
+        id,
+        vapi_call_id,
+        status,
+        duration_seconds,
+        created_at,
+        leads (name, phone_number, address)
+      `)
+      .eq("agency_id", agencyId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    
+    // Also fetch recent leads with activity
     const { data: recentLeads, error: leadsError } = await supabase
       .from("leads")
       .select("id, name, phone_number, address, status, metadata, created_at, updated_at")
