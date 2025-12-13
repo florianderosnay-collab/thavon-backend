@@ -58,13 +58,16 @@ export async function POST(req: NextRequest) {
   // #endregion
 
   try {
-    // 1. Verify webhook signature (if Vapi provides one)
+    // 1. Get request body (read once for both signature verification and parsing)
+    const bodyText = await req.text();
+    const payload = JSON.parse(bodyText);
+    
+    // 2. Verify webhook signature (if Vapi provides one)
     const signature = req.headers.get("x-vapi-signature");
     const webhookSecret = process.env.VAPI_WEBHOOK_SECRET;
     
     if (webhookSecret && signature) {
-      const body = await req.text();
-      const isValid = verifyVapiSignature(body, signature, webhookSecret);
+      const isValid = verifyVapiSignature(bodyText, signature, webhookSecret);
       if (!isValid) {
         console.error("❌ Invalid Vapi webhook signature");
         return NextResponse.json(
@@ -74,9 +77,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Parse webhook payload
-    const payload = await req.json();
-    const eventType = payload.type || payload.event; // Vapi may use either
+    // 3. Determine event type (Vapi may send it in different locations)
+    const eventType = payload.type || payload.event || payload.message?.type;
     
     // #region agent log
     try {
@@ -239,10 +241,11 @@ async function handleCallUpdate(payload: any) {
   const status = call.status || "completed";
   
   // Extract metadata (we pass this when creating the call)
-  const metadata = call.metadata || call.customData || {};
-  const agencyId = metadata.agency_id || metadata.agencyId;
-  const leadId = metadata.lead_id || metadata.leadId;
-  const agentId = metadata.agent_id || metadata.agentId;
+  // Vapi may send metadata in different locations depending on event type
+  const metadata = call.metadata || call.customData || payload.metadata || {};
+  let agencyId = metadata.agency_id || metadata.agencyId;
+  let leadId = metadata.lead_id || metadata.leadId;
+  let agentId = metadata.agent_id || metadata.agentId;
 
   // #region agent log
   try {
@@ -257,6 +260,7 @@ async function handleCallUpdate(payload: any) {
           leadId: leadId || null,
           agentId: agentId || null,
           hasMetadata: !!metadata,
+          callId: callId,
         },
         timestamp: Date.now(),
         sessionId: 'debug-session',
@@ -267,6 +271,90 @@ async function handleCallUpdate(payload: any) {
   } catch {}
   // #endregion
 
+  // FALLBACK 1: If metadata is missing, try to look up existing call log by vapi_call_id
+  if (!agencyId && callId) {
+    try {
+      const { data: existingCall } = await supabaseAdmin
+        .from("call_logs")
+        .select("agency_id, lead_id, agent_id")
+        .eq("vapi_call_id", callId)
+        .single();
+      
+      if (existingCall) {
+        agencyId = existingCall.agency_id;
+        leadId = leadId || existingCall.lead_id;
+        agentId = agentId || existingCall.agent_id;
+        
+        // #region agent log
+        try {
+          await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'route.ts:handleCallUpdate:fallback-lookup-callid',
+              message: 'Found agency_id via call_id lookup',
+              data: {
+                agencyId: agencyId,
+                callId: callId,
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'webhook-process',
+              hypothesisId: 'H3'
+            })
+          }).catch(() => {});
+        } catch {}
+        // #endregion
+      }
+    } catch (lookupError) {
+      // Ignore - try next fallback
+    }
+  }
+
+  // FALLBACK 2: If still no agencyId, try to look up by phone number from the call
+  if (!agencyId) {
+    const phoneNumber = call.customer?.number || call.phoneNumber || payload.phoneNumber;
+    if (phoneNumber) {
+      try {
+        const { data: lead } = await supabaseAdmin
+          .from("leads")
+          .select("agency_id, id")
+          .eq("phone_number", String(phoneNumber))
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (lead) {
+          agencyId = lead.agency_id;
+          leadId = leadId || lead.id;
+          
+          // #region agent log
+          try {
+            await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'route.ts:handleCallUpdate:fallback-lookup-phone',
+                message: 'Found agency_id via phone number lookup',
+                data: {
+                  agencyId: agencyId,
+                  phoneNumber: phoneNumber,
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                runId: 'webhook-process',
+                hypothesisId: 'H3'
+              })
+            }).catch(() => {});
+          } catch {}
+          // #endregion
+        }
+      } catch (lookupError) {
+        // Ignore - will fail below
+      }
+    }
+  }
+
   if (!agencyId) {
     // #region agent log
     try {
@@ -276,7 +364,11 @@ async function handleCallUpdate(payload: any) {
         body: JSON.stringify({
           location: 'route.ts:handleCallUpdate:missing-agency',
           message: 'Missing agency_id - aborting',
-          data: { metadataKeys: Object.keys(metadata) },
+          data: { 
+            metadataKeys: Object.keys(metadata),
+            callId: callId,
+            payloadKeys: Object.keys(payload),
+          },
           timestamp: Date.now(),
           sessionId: 'debug-session',
           runId: 'webhook-process',
@@ -285,7 +377,7 @@ async function handleCallUpdate(payload: any) {
       }).catch(() => {});
     } catch {}
     // #endregion
-    console.error("❌ Missing agency_id in call metadata");
+    console.error("❌ Missing agency_id in call metadata and could not lookup by call_id");
     return;
   }
 
