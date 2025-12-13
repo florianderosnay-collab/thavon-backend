@@ -105,12 +105,14 @@ export async function POST(req: NextRequest) {
     } catch {}
     // #endregion
     
-    console.log(`📞 Vapi Webhook: ${eventType}`, {
+    // Log to console (visible in Vercel logs)
+    console.log(`📞 Vapi Webhook Received: ${eventType}`, {
       callId: payload.call?.id || payload.callId || message.call?.id,
       status: payload.call?.status || payload.status || message.call?.status,
       hasMessage: !!message,
       hasPayloadCall: !!payload.call,
       hasMessageCall: !!message.call,
+      timestamp: new Date().toISOString(),
     });
 
     // 4. Handle different event types
@@ -309,30 +311,23 @@ async function handleCallUpdate(payload: any) {
   }
 
   if (!agencyId) {
-    // #region agent log
-    try {
-      await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'route.ts:handleCallUpdate:missing-agency',
-          message: 'Missing agency_id - aborting',
-          data: { 
-            metadataKeys: Object.keys(metadata),
-            callId: callId,
-            payloadKeys: Object.keys(payload),
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'webhook-process',
-          hypothesisId: 'H3'
-        })
-      }).catch(() => {});
-    } catch {}
-    // #endregion
-    console.error("❌ Missing agency_id in call metadata and could not lookup by call_id");
+    console.error("❌ CRITICAL: Missing agency_id in call metadata", {
+      callId,
+      metadataKeys: Object.keys(metadata),
+      payloadKeys: Object.keys(payload),
+      messageKeys: message ? Object.keys(message) : [],
+      hasCall: !!call,
+      phoneNumber: call.customer?.number || call.phoneNumber || payload.phoneNumber,
+    });
     return;
   }
+  
+  console.log("✅ Processing call update", {
+    callId,
+    agencyId,
+    leadId,
+    status: callStatus,
+  });
 
   // Extract call data
   const transcript = call.transcript || call.recording?.transcript || "";
@@ -432,9 +427,23 @@ async function handleCallUpdate(payload: any) {
   // #endregion
 
   if (error) {
-    console.error("❌ Error saving call log:", error);
+    console.error("❌ CRITICAL: Error saving call log to database", {
+      error: error.message,
+      code: error.code,
+      details: error.details,
+      callId,
+      agencyId,
+    });
     return;
   }
+  
+  console.log("✅ Call log saved successfully", {
+    callLogId: callLog?.id,
+    callId,
+    agencyId,
+    hasRecording: !!recordingUrl,
+    hasTranscript: !!transcript,
+  });
 
   console.log(`✅ Call log saved: ${callLog.id}`);
 
