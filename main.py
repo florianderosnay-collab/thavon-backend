@@ -285,6 +285,16 @@ def trigger_vapi_call(payload):
                         "key_length": len(VAPI_Private_Key) if VAPI_Private_Key else 0,
                         "key_prefix": VAPI_Private_Key[:10] if VAPI_Private_Key and len(VAPI_Private_Key) > 10 else "too_short",
                         "key_suffix": VAPI_Private_Key[-10:] if VAPI_Private_Key and len(VAPI_Private_Key) > 10 else "too_short",
+                        "payload_structure": {
+                            "has_phoneNumberId": "phoneNumberId" in payload,
+                            "has_customer": "customer" in payload,
+                            "has_assistant": "assistant" in payload,
+                            "assistant_has_model": "model" in payload.get("assistant", {}),
+                            "assistant_has_functions": "functions" in payload.get("assistant", {}),
+                            "assistant_has_firstMessage": "firstMessage" in payload.get("assistant", {}),
+                            "assistant_model_provider": payload.get("assistant", {}).get("model", {}).get("provider", "missing"),
+                            "assistant_model_name": payload.get("assistant", {}).get("model", {}).get("model", "missing"),
+                        }
                     },
                     "timestamp": int(time.time() * 1000)
                 }
@@ -502,19 +512,37 @@ def process_outbound_calls(leads: list):
             pass
         # #endregion
         
+        # Build payload matching the working frontend structure
         vapi_payload = {
             "phoneNumberId": phone_number_id or "YOUR_TWILIO_PHONE_ID_FROM_VAPI",
-            "customer": { "number": lead_phone, "name": lead_name },
+            "customer": { 
+                "number": str(lead_phone), 
+                "name": lead_name 
+            },
             "assistant": {
-                "model": { 
-                    "provider": "groq", 
-                    "model": "llama-3-70b-versatile" 
+                "model": {
+                    "provider": "openai",  # Match frontend (was "groq")
+                    "model": "gpt-4o"  # Match frontend (was "llama-3-70b-versatile")
                 },
                 "systemPrompt": f"You are a Senior Agent calling {lead_name} about their property. Book an appointment.",
+                "functions": [  # Add functions array (was missing)
+                    {
+                        "name": "bookAppointment",
+                        "description": "Book the meeting.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "time": {"type": "string"},
+                                "notes": {"type": "string"}
+                            }
+                        }
+                    }
+                ],
                 "voice": { 
                     "provider": "cartesia", 
                     "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d" 
                 },
+                "firstMessage": f"Hi {lead_name}, this is the real estate team calling about your property. Do you have a minute?",  # Add firstMessage (was missing)
             },
             "metadata": {
                 "agency_id": agency_id,
