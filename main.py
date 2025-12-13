@@ -1011,6 +1011,11 @@ async def assistant_request(request: Request):
             # Unknown event type - log and acknowledge
             print(f"⚠️ Unknown Vapi event type: {event_type or message_type}")
             return {"status": "acknowledged"}
+            
+    except Exception as e:
+        print(f"❌ Server URL endpoint error: {e}")
+        # Return a default response to prevent Vapi from retrying
+        return {"status": "error", "message": str(e)[:200]}
 
 async def handle_assistant_request(payload: dict, message: dict):
     """Handle assistant-request events - return dynamic assistant configuration"""
