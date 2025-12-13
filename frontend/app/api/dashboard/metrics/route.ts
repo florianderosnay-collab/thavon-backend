@@ -65,14 +65,14 @@ export async function GET(req: Request) {
       : 0;
 
     // 2. CALLS ATTEMPTED: Count from call_logs table (more accurate)
-    const { count: callsAttempted, error: callsError } = await supabase
+    const { count: callsAttempted, error: callsError } = await supabaseAdmin
       .from("call_logs")
       .select("*", { count: "exact", head: true })
       .eq("agency_id", agencyId);
     
     // Also count from leads with call statuses as fallback
     const callStatuses = ['called', 'calling_inbound', 'voicemail', 'appointment_booked', 'no_answer', 'busy', 'callback'];
-    const { count: leadsWithCalls } = await supabase
+    const { count: leadsWithCalls } = await supabaseAdmin
       .from("leads")
       .select("*", { count: "exact", head: true })
       .eq("agency_id", agencyId)
@@ -82,7 +82,7 @@ export async function GET(req: Request) {
     const totalCalls = Math.max(callsAttempted || 0, leadsWithCalls || 0);
 
     // Calculate connection rate (leads with appointments or successful calls / total calls)
-    const { count: successfulCalls } = await supabase
+    const { count: successfulCalls } = await supabaseAdmin
       .from("leads")
       .select("*", { count: "exact", head: true })
       .eq("agency_id", agencyId)
@@ -92,20 +92,24 @@ export async function GET(req: Request) {
       ? Math.round(((successfulCalls || 0) / callsAttempted) * 100)
       : 0;
 
-    // 3. APPOINTMENTS: Count leads with appointment status
-    const { count: appointments, error: appointmentsError } = await supabase
-      .from("leads")
+    // 3. APPOINTMENTS: Count from appointments table (more accurate)
+    const { count: appointments, error: appointmentsError } = await supabaseAdmin
+      .from("appointments")
       .select("*", { count: "exact", head: true })
       .eq("agency_id", agencyId)
-      .eq("status", "appointment_booked");
+      .gte("scheduled_at", new Date().toISOString()); // Only future/upcoming appointments
 
     // Get next appointment
-    const { data: nextAppointment } = await supabase
-      .from("leads")
-      .select("name, address, metadata")
+    const { data: nextAppointment } = await supabaseAdmin
+      .from("appointments")
+      .select(`
+        scheduled_at,
+        notes,
+        leads (name, address)
+      `)
       .eq("agency_id", agencyId)
-      .eq("status", "appointment_booked")
-      .order("created_at", { ascending: true })
+      .gte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at", { ascending: true })
       .limit(1)
       .single();
 
@@ -127,7 +131,7 @@ export async function GET(req: Request) {
     // Assuming average commission is 3% (0.03) - you can make this configurable
     const AVG_COMMISSION_RATE = 0.03;
 
-    const { data: leadsWithPrices, error: pipelineError } = await supabase
+    const { data: leadsWithPrices, error: pipelineError } = await supabaseAdmin
       .from("leads")
       .select("asking_price")
       .eq("agency_id", agencyId)
