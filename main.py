@@ -960,12 +960,17 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
 
     return {"status": "calling", "lead": name, "message": "Call will be initiated in 30 seconds"}
 
-# --- ASSISTANT REQUEST ENDPOINT (Vapi calls this during calls) ---
+# --- VAPI SERVER URL ENDPOINT (Handles ALL Vapi events) ---
 @app.post("/assistant-request")
 async def assistant_request(request: Request):
     """
-    Vapi calls this endpoint during a call to get the assistant configuration.
-    This allows dynamic assistant configuration based on the call context.
+    Vapi Server URL endpoint - handles ALL event types:
+    - assistant-request: Get dynamic assistant configuration
+    - status-update: Call status changes
+    - transcript-update: Call transcripts
+    - function-call: Function execution requests
+    - end-of-call-report: Call completion data
+    - hang: Hang notifications
     """
     try:
         payload = await request.json()
@@ -975,12 +980,13 @@ async def assistant_request(request: Request):
             with open(log_path, "a") as f:
                 log_entry = {
                     "sessionId": "debug-session",
-                    "runId": "assistant-request",
-                    "hypothesisId": "AR",
+                    "runId": "vapi-server-url",
+                    "hypothesisId": "VAPI_EVENT",
                     "location": "main.py:assistant_request:entry",
-                    "message": "assistant-request endpoint called",
+                    "message": "Vapi Server URL endpoint called",
                     "data": {
                         "payload_keys": list(payload.keys()) if payload else [],
+                        "payload_type": payload.get('type') or payload.get('event') or payload.get('message', {}).get('type'),
                     },
                     "timestamp": int(time.time() * 1000)
                 }
@@ -989,38 +995,48 @@ async def assistant_request(request: Request):
             pass
         # #endregion
         
-        print("📞 Assistant Request received:", json.dumps(payload))
-        
-        # Vapi sends data inside a 'message' object
+        # Determine event type
+        event_type = payload.get('type') or payload.get('event')
         message = payload.get('message', {})
+        message_type = message.get('type') if message else None
         
-        # If this is just a status update (call started/ended), ignore it
-        if message.get('type') != 'assistant-request':
-            return {"status": "ignored"}
-        
-        call = message.get('call', {})
-        customer = call.get('customer', {})
-        phone_number = customer.get('number')
-        
-        print(f"🔍 Looking up Phone Number: {phone_number}")
-        
-        # Database lookup for lead information
-        lead_name = "there"
-        address = "your property"
-        
-        if phone_number:
-            try:
-                response = supabase.table('leads').select("*").eq('phone_number', phone_number).execute()
-                if response.data and len(response.data) > 0:
-                    lead = response.data[0]
-                    lead_name = lead.get('name', "there")
-                    address = lead.get('address', "the property")
-                    print(f"✅ FOUND LEAD: {lead_name} at {address}")
-            except Exception as e:
-                print(f"❌ Database Error: {e}")
-        
-        # Build the assistant configuration
-        system_prompt = f"""
+        # Handle different event types
+        if message_type == 'assistant-request' or event_type == 'assistant-request':
+            # ASSISTANT REQUEST: Return dynamic assistant configuration
+            return await handle_assistant_request(payload, message)
+        elif event_type in ['status-update', 'call-status-update', 'end-of-call-report', 'transcript-update', 'function-call', 'hang']:
+            # WEBHOOK EVENTS: Forward to frontend webhook endpoint
+            return await forward_to_webhook(payload, event_type)
+        else:
+            # Unknown event type - log and acknowledge
+            print(f"⚠️ Unknown Vapi event type: {event_type or message_type}")
+            return {"status": "acknowledged"}
+
+async def handle_assistant_request(payload: dict, message: dict):
+    """Handle assistant-request events - return dynamic assistant configuration"""
+    call = message.get('call', {})
+    customer = call.get('customer', {})
+    phone_number = customer.get('number')
+    
+    print(f"🔍 Assistant Request - Looking up Phone Number: {phone_number}")
+    
+    # Database lookup for lead information
+    lead_name = "there"
+    address = "your property"
+    
+    if phone_number:
+        try:
+            response = supabase.table('leads').select("*").eq('phone_number', phone_number).execute()
+            if response.data and len(response.data) > 0:
+                lead = response.data[0]
+                lead_name = lead.get('name', "there")
+                address = lead.get('address', "the property")
+                print(f"✅ FOUND LEAD: {lead_name} at {address}")
+        except Exception as e:
+            print(f"❌ Database Error: {e}")
+    
+    # Build the assistant configuration
+    system_prompt = f"""
 You are Thavon, a Real Estate Agent.
 You are speaking to {lead_name}.
 You are calling about their FSBO property at {address}.
@@ -1030,37 +1046,76 @@ TONE: Friendly, professional, concise.
 
 If they ask "What do you want?": Say "I saw your listing for {address} and wanted to see if you are open to working with buyers."
 """
-        
-        # Return assistant configuration to Vapi
-        assistant_config = {
-            "assistant": {
-                "firstMessage": f"Hello {lead_name}, it's Thavon calling about {address}. Do you have a minute?",
-                "model": {
-                    "provider": "openai",
-                    "model": "gpt-4o",
-                    "systemPrompt": system_prompt
-                },
-                "voice": {
-                    "provider": "cartesia",
-                    "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
-                    "model": "sonic-english"
-                }
+    
+    # Return assistant configuration to Vapi
+    assistant_config = {
+        "assistant": {
+            "firstMessage": f"Hello {lead_name}, it's Thavon calling about {address}. Do you have a minute?",
+            "model": {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "systemPrompt": system_prompt
+            },
+            "voice": {
+                "provider": "cartesia",
+                "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
+                "model": "sonic-english"
             }
         }
+    }
+    
+    # #region agent log
+    try:
+        with open(log_path, "a") as f:
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "assistant-request",
+                "hypothesisId": "AR_SUCCESS",
+                "location": "main.py:handle_assistant_request:response",
+                "message": "Returning assistant configuration",
+                "data": {
+                    "lead_name": lead_name,
+                    "address": address,
+                    "phone_number": phone_number,
+                },
+                "timestamp": int(time.time() * 1000)
+            }
+            f.write(json.dumps(log_entry) + "\n")
+    except:
+        pass
+    # #endregion
+    
+    return assistant_config
+
+async def forward_to_webhook(payload: dict, event_type: str):
+    """Forward webhook events to the frontend webhook endpoint"""
+    webhook_url = os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')
+    frontend_webhook = f"{webhook_url}/api/webhooks/vapi"
+    
+    print(f"📤 Forwarding {event_type} event to frontend webhook: {frontend_webhook}")
+    
+    try:
+        # Forward the event to the frontend webhook endpoint
+        response = requests.post(
+            frontend_webhook,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=10
+        )
         
         # #region agent log
         try:
             with open(log_path, "a") as f:
                 log_entry = {
                     "sessionId": "debug-session",
-                    "runId": "assistant-request",
-                    "hypothesisId": "AR_SUCCESS",
-                    "location": "main.py:assistant_request:response",
-                    "message": "Returning assistant configuration",
+                    "runId": "webhook-forward",
+                    "hypothesisId": "WEBHOOK_FORWARD",
+                    "location": "main.py:forward_to_webhook",
+                    "message": f"Forwarded {event_type} to frontend",
                     "data": {
-                        "lead_name": lead_name,
-                        "address": address,
-                        "phone_number": phone_number,
+                        "event_type": event_type,
+                        "frontend_url": frontend_webhook,
+                        "status_code": response.status_code,
                     },
                     "timestamp": int(time.time() * 1000)
                 }
@@ -1069,26 +1124,36 @@ If they ask "What do you want?": Say "I saw your listing for {address} and wante
             pass
         # #endregion
         
-        return assistant_config
+        if response.status_code in [200, 201]:
+            print(f"✅ Successfully forwarded {event_type} to frontend")
+        else:
+            print(f"⚠️ Frontend webhook returned {response.status_code}: {response.text[:200]}")
+        
+        return {"status": "forwarded", "event_type": event_type}
         
     except Exception as e:
-        print(f"❌ Assistant Request Error: {e}")
-        # Return a default configuration if there's an error
-        return {
-            "assistant": {
-                "firstMessage": "Hello, this is Thavon calling. Do you have a minute?",
-                "model": {
-                    "provider": "openai",
-                    "model": "gpt-4o",
-                    "systemPrompt": "You are Thavon, a Real Estate Agent. Book a viewing."
-                },
-                "voice": {
-                    "provider": "cartesia",
-                    "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
-                    "model": "sonic-english"
+        print(f"❌ Error forwarding to frontend webhook: {e}")
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "webhook-forward-error",
+                    "hypothesisId": "WEBHOOK_FORWARD_ERROR",
+                    "location": "main.py:forward_to_webhook:error",
+                    "message": "Error forwarding webhook",
+                    "data": {
+                        "event_type": event_type,
+                        "error": str(e)[:200],
+                    },
+                    "timestamp": int(time.time() * 1000)
                 }
-            }
-        }
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
+        # #endregion
+        # Still return success to Vapi so it doesn't retry
+        return {"status": "acknowledged", "note": "forwarding_failed"}
 
 @app.post("/start-campaign")
 async def start_campaign(request: CampaignRequest, background_tasks: BackgroundTasks):
