@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient"; 
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
   Copy, Zap, ExternalLink, Key, CheckCircle2, XCircle, 
-  Loader2, AlertCircle, ChevronRight, Play, Settings
+  Loader2, AlertCircle, ChevronRight, Play, Settings, MessageSquare
 } from "lucide-react";
 
 interface Integration {
@@ -504,14 +505,16 @@ export default function IntegrationsPage() {
                 </p>
                 <div className="flex gap-3">
                   <Button variant="outline" size="sm" asChild>
-                    <a href="#" target="_blank" rel="noopener noreferrer">
+                    <Link href="/integrations/docs">
                       <ExternalLink className="w-4 h-4 mr-2" />
                       Documentation
-                    </a>
+                    </Link>
                   </Button>
-                  <Button variant="outline" size="sm">
-                    <Settings className="w-4 h-4 mr-2" />
-                    Contact Support
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/integrations/support">
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      Contact Support
+                    </Link>
                   </Button>
                 </div>
               </div>
