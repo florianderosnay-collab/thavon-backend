@@ -731,7 +731,8 @@ def process_outbound_calls(leads: list):
             pass
         # #endregion
         
-        # Build payload matching the working frontend structure
+        # Build payload - SIMPLIFIED to match working version
+        # Remove webhookUrl and metadata if they're causing issues
         vapi_payload = {
             "phoneNumberId": phone_number_id or "YOUR_TWILIO_PHONE_ID_FROM_VAPI",
             "customer": { 
@@ -739,36 +740,29 @@ def process_outbound_calls(leads: list):
                 "name": lead_name 
             },
             "assistant": {
+                "firstMessage": f"Hi {lead_name}, this is the real estate team calling about your property. Do you have a minute?",
                 "model": {
-                    "provider": "openai",  # Match frontend (was "groq")
-                    "model": "gpt-4o"  # Match frontend (was "llama-3-70b-versatile")
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "systemPrompt": f"You are a Senior Agent calling {lead_name} about their property. Book an appointment."
                 },
-                "systemPrompt": f"You are a Senior Agent calling {lead_name} about their property. Book an appointment.",
-                "functions": [  # Add functions array (was missing)
-                    {
-                        "name": "bookAppointment",
-                        "description": "Book the meeting.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "time": {"type": "string"},
-                                "notes": {"type": "string"}
-                            }
-                        }
-                    }
-                ],
                 "voice": { 
                     "provider": "cartesia", 
-                    "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d" 
-                },
-                "firstMessage": f"Hi {lead_name}, this is the real estate team calling about your property. Do you have a minute?",  # Add firstMessage (was missing)
-            },
-            "metadata": {
-                "agency_id": agency_id,
-                "lead_id": lead.get('id'),
-                "is_outbound": True
-            },
-            "webhookUrl": f"{os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')}/api/webhooks/vapi"
+                    "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
+                    "model": "sonic-english"  # Match old working code structure
+                }
+            }
+        }
+        
+        # Only add optional fields if they exist in env
+        if os.environ.get('NEXT_PUBLIC_BASE_URL'):
+            vapi_payload["webhookUrl"] = f"{os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')}/api/webhooks/vapi"
+        
+        # Add metadata only if needed
+        vapi_payload["metadata"] = {
+            "agency_id": agency_id,
+            "lead_id": lead.get('id'),
+            "is_outbound": True
         }
         
         # 2. TRIGGER THE CALL
@@ -945,22 +939,17 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
         "phoneNumberId": os.environ.get("VAPI_PHONE_NUMBER_ID", "YOUR_TWILIO_PHONE_ID_FROM_VAPI"), 
         "customer": { "number": str(phone), "name": name },
         "assistant": {
+            "firstMessage": f"Hi {name}, this is the real estate team calling about your request. Do you have a minute?",
             "model": {
                 "provider": "openai",
                 "model": "gpt-4o",
-                "systemPrompt": inbound_prompt,
-                # Reuse your existing tools or make specific ones
-                "functions": [
-                    {
-                        "name": "bookAppointment",
-                        "description": "Book the meeting.",
-                        "parameters": { "type": "object", "properties": { "time": {"type": "string"}, "notes": {"type": "string"} } }
-                    }
-                ]
+                "systemPrompt": inbound_prompt
             },
-            "voice": { "provider": "cartesia", "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d" },
-            "firstMessage": f"Hi {name}, this is the real estate team calling about your request. Do you have a minute?",
-            "language": language  # NEW: Pass language to Vapi
+            "voice": { 
+                "provider": "cartesia", 
+                "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
+                "model": "sonic-english"  # Match old working code structure
+            }
         },
         "metadata": {
             "agency_id": agency_id,
