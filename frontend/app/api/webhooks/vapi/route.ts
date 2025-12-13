@@ -62,6 +62,16 @@ export async function POST(req: NextRequest) {
     const bodyText = await req.text();
     const payload = JSON.parse(bodyText);
     
+    // Log raw payload structure for debugging
+    console.log("🔍 RAW PAYLOAD:", {
+      keys: Object.keys(payload),
+      hasMessage: !!payload.message,
+      messageKeys: payload.message ? Object.keys(payload.message) : [],
+      payloadType: payload.type,
+      payloadEvent: payload.event,
+      messageType: payload.message?.type,
+    });
+    
     // 2. Verify webhook signature (if Vapi provides one)
     const signature = req.headers.get("x-vapi-signature");
     const webhookSecret = process.env.VAPI_WEBHOOK_SECRET;
@@ -82,31 +92,8 @@ export async function POST(req: NextRequest) {
     const message = payload.message || {};
     const eventType = message.type || payload.type || payload.event;
     
-    // #region agent log
-    try {
-      await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'route.ts:POST:parsed',
-          message: 'Event type identified',
-          data: {
-            eventType,
-            hasCall: !!payload.call,
-            callId: payload.call?.id || payload.callId,
-            callStatus: payload.call?.status || payload.status,
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'webhook-receive',
-          hypothesisId: 'H2'
-        })
-      }).catch(() => {});
-    } catch {}
-    // #endregion
-    
-    // Log to console (visible in Vercel logs)
-    console.log(`📞 Vapi Webhook Received: ${eventType}`, {
+    // Log extracted event info
+    console.log(`📞 Vapi Webhook: ${eventType}`, {
       callId: payload.call?.id || payload.callId || message.call?.id,
       status: payload.call?.status || payload.status || message.call?.status,
       hasMessage: !!message,
