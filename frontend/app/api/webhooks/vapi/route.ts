@@ -23,6 +23,21 @@ const supabaseAdmin = createClient(
  * - function-call: Function was called (e.g., bookAppointment)
  * - end-of-call-report: Call completed with full data
  */
+
+// GET handler for testing/verification (returns helpful message)
+export async function GET(req: NextRequest) {
+  return NextResponse.json(
+    {
+      status: "ok",
+      message: "Vapi webhook endpoint is active. This endpoint only accepts POST requests from Vapi.",
+      endpoint: "/api/webhooks/vapi",
+      method: "POST",
+      note: "To test this endpoint, use a tool like Postman or curl with a POST request.",
+    },
+    { status: 200 }
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1. Verify webhook signature (if Vapi provides one)
