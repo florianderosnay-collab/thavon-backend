@@ -960,6 +960,136 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
 
     return {"status": "calling", "lead": name, "message": "Call will be initiated in 30 seconds"}
 
+# --- ASSISTANT REQUEST ENDPOINT (Vapi calls this during calls) ---
+@app.post("/assistant-request")
+async def assistant_request(request: Request):
+    """
+    Vapi calls this endpoint during a call to get the assistant configuration.
+    This allows dynamic assistant configuration based on the call context.
+    """
+    try:
+        payload = await request.json()
+        
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "assistant-request",
+                    "hypothesisId": "AR",
+                    "location": "main.py:assistant_request:entry",
+                    "message": "assistant-request endpoint called",
+                    "data": {
+                        "payload_keys": list(payload.keys()) if payload else [],
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
+        # #endregion
+        
+        print("📞 Assistant Request received:", json.dumps(payload))
+        
+        # Vapi sends data inside a 'message' object
+        message = payload.get('message', {})
+        
+        # If this is just a status update (call started/ended), ignore it
+        if message.get('type') != 'assistant-request':
+            return {"status": "ignored"}
+        
+        call = message.get('call', {})
+        customer = call.get('customer', {})
+        phone_number = customer.get('number')
+        
+        print(f"🔍 Looking up Phone Number: {phone_number}")
+        
+        # Database lookup for lead information
+        lead_name = "there"
+        address = "your property"
+        
+        if phone_number:
+            try:
+                response = supabase.table('leads').select("*").eq('phone_number', phone_number).execute()
+                if response.data and len(response.data) > 0:
+                    lead = response.data[0]
+                    lead_name = lead.get('name', "there")
+                    address = lead.get('address', "the property")
+                    print(f"✅ FOUND LEAD: {lead_name} at {address}")
+            except Exception as e:
+                print(f"❌ Database Error: {e}")
+        
+        # Build the assistant configuration
+        system_prompt = f"""
+You are Thavon, a Real Estate Agent.
+You are speaking to {lead_name}.
+You are calling about their FSBO property at {address}.
+
+GOAL: Book a viewing.
+TONE: Friendly, professional, concise.
+
+If they ask "What do you want?": Say "I saw your listing for {address} and wanted to see if you are open to working with buyers."
+"""
+        
+        # Return assistant configuration to Vapi
+        assistant_config = {
+            "assistant": {
+                "firstMessage": f"Hello {lead_name}, it's Thavon calling about {address}. Do you have a minute?",
+                "model": {
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "systemPrompt": system_prompt
+                },
+                "voice": {
+                    "provider": "cartesia",
+                    "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
+                    "model": "sonic-english"
+                }
+            }
+        }
+        
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "assistant-request",
+                    "hypothesisId": "AR_SUCCESS",
+                    "location": "main.py:assistant_request:response",
+                    "message": "Returning assistant configuration",
+                    "data": {
+                        "lead_name": lead_name,
+                        "address": address,
+                        "phone_number": phone_number,
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
+        # #endregion
+        
+        return assistant_config
+        
+    except Exception as e:
+        print(f"❌ Assistant Request Error: {e}")
+        # Return a default configuration if there's an error
+        return {
+            "assistant": {
+                "firstMessage": "Hello, this is Thavon calling. Do you have a minute?",
+                "model": {
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "systemPrompt": "You are Thavon, a Real Estate Agent. Book a viewing."
+                },
+                "voice": {
+                    "provider": "cartesia",
+                    "voiceId": "248be419-c632-4f23-adf1-5324ed7dbf1d",
+                    "model": "sonic-english"
+                }
+            }
+        }
+
 @app.post("/start-campaign")
 async def start_campaign(request: CampaignRequest, background_tasks: BackgroundTasks):
     """
