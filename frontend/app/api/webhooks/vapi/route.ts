@@ -468,16 +468,29 @@ async function handleFunctionCall(payload: any) {
     if (scheduledAt) {
       // Assign agent if not provided
       let assignedAgentId = agentId;
+      let leadName = "Lead"; // Default lead name
+      
       if (!assignedAgentId) {
         const { assignAgentToLead } = await import("@/lib/agent-assignment");
         const { data: lead } = await supabaseAdmin
           .from("leads")
-          .select("id, address, agency_id")
+          .select("id, name, address, agency_id")
           .eq("id", leadId)
           .single();
         
         if (lead) {
           assignedAgentId = await assignAgentToLead(lead, scheduledAt);
+          leadName = lead.name || "Lead";
+        }
+      } else {
+        // Fetch lead name if we already have an assigned agent
+        const { data: lead } = await supabaseAdmin
+          .from("leads")
+          .select("name")
+          .eq("id", leadId)
+          .single();
+        if (lead) {
+          leadName = lead.name || "Lead";
         }
       }
 
@@ -501,7 +514,7 @@ async function handleFunctionCall(payload: any) {
             lead_id: leadId,
             scheduled_at: scheduledAt,
             notes: notes,
-            title: `Appointment with ${lead?.name || "Lead"}`,
+            title: `Appointment with ${leadName}`,
           }),
         }).catch((err) => console.error("Failed to create calendar event:", err));
       }
