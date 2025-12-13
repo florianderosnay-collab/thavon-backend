@@ -1000,11 +1000,62 @@ async def assistant_request(request: Request):
         message = payload.get('message', {})
         message_type = message.get('type') if message else None
         
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "event-routing",
+                    "hypothesisId": "H1",
+                    "location": "main.py:assistant_request:event-detection",
+                    "message": "Event type detection",
+                    "data": {
+                        "event_type": event_type,
+                        "message_type": message_type,
+                        "payload_type": payload.get('type'),
+                        "payload_event": payload.get('event'),
+                        "payload_keys": list(payload.keys()) if payload else [],
+                        "message_keys": list(message.keys()) if message else [],
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
+        # #endregion
+        
         # Handle different event types
         if message_type == 'assistant-request' or event_type == 'assistant-request':
             # ASSISTANT REQUEST: Return dynamic assistant configuration
             return await handle_assistant_request(payload, message)
-        elif event_type in ['status-update', 'call-status-update', 'end-of-call-report', 'transcript-update', 'function-call', 'hang', 'speech-update', 'conversation-update']:
+        # Check if event should be forwarded
+        webhook_events = ['status-update', 'call-status-update', 'end-of-call-report', 'transcript-update', 'function-call', 'hang', 'speech-update', 'conversation-update', 'assistant.started']
+        should_forward = event_type in webhook_events
+        
+        # #region agent log
+        try:
+            with open(log_path, "a") as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "event-routing",
+                    "hypothesisId": "H1",
+                    "location": "main.py:assistant_request:condition-check",
+                    "message": "Checking if event should be forwarded",
+                    "data": {
+                        "event_type": event_type,
+                        "event_type_repr": repr(event_type),
+                        "event_type_in_list": event_type in webhook_events,
+                        "should_forward": should_forward,
+                        "webhook_events": webhook_events,
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass
+        # #endregion
+        
+        if should_forward:
             # WEBHOOK EVENTS: Forward to frontend webhook endpoint
             # #region agent log
             try:
