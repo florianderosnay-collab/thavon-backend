@@ -5,15 +5,17 @@ import { Sidebar } from "@/components/Sidebar";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLoginPage = pathname === "/login";
+  // Pages that should NOT show sidebar
+  const noSidebarPages = ["/login", "/reset-password", "/onboarding"];
+  const shouldShowSidebar = !noSidebarPages.includes(pathname);
 
   return (
     <div className="flex min-h-screen">
-      {/* Only show Sidebar if NOT on login page */}
-      {!isLoginPage && <Sidebar />}
+      {/* Only show Sidebar if NOT on auth/onboarding pages */}
+      {shouldShowSidebar && <Sidebar />}
       
-      {/* Adjust margin: 0px for login page, 64px (16rem) for dashboard */}
-      <main className={`flex-1 p-8 ${isLoginPage ? "ml-0" : "ml-64"}`}>
+      {/* Adjust margin: 0px for auth pages, 64px (16rem) for dashboard */}
+      <main className={`flex-1 ${shouldShowSidebar ? "ml-64 p-8" : "ml-0"}`}>
         {children}
       </main>
     </div>

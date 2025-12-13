@@ -21,17 +21,29 @@ function ResetPasswordContent() {
   const [step, setStep] = useState<"request" | "reset">("request");
 
   useEffect(() => {
-    // Check for token in URL hash (Supabase uses hash fragments for password reset)
-    const hash = window.location.hash;
-    if (hash.includes("access_token") || hash.includes("type=recovery")) {
-      setStep("reset");
-    }
-    // Also check query params as fallback
-    const token = searchParams.get("token");
-    if (token) {
-      setStep("reset");
-    }
-  }, [searchParams]);
+    // Check for password reset token in URL hash (Supabase uses hash fragments)
+    const checkForResetToken = () => {
+      const hash = window.location.hash;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:23',message:'Checking for reset token',data:{hasHash:!!hash,hashLength:hash.length,hashPreview:hash.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'H'})}).catch(()=>{});
+      // #endregion
+
+      if (hash && (hash.includes("access_token") || hash.includes("type=recovery"))) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:28',message:'Reset token found in hash',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'I'})}).catch(()=>{});
+        // #endregion
+        setStep("reset");
+        // Clear the hash from URL for cleaner UX
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    };
+
+    checkForResetToken();
+    
+    // Also check on hash change (in case it's set after initial load)
+    window.addEventListener("hashchange", checkForResetToken);
+    return () => window.removeEventListener("hashchange", checkForResetToken);
+  }, []);
 
   const validatePassword = (pwd: string): string | null => {
     if (pwd.length < 6 || pwd.length > 8) {
@@ -99,10 +111,19 @@ function ResetPasswordContent() {
     }
 
     try {
-      // Supabase password reset doesn't require a token parameter
-      // The session is automatically established from the hash fragment
+      // Verify user is authenticated (session should be established from hash fragment)
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:78',message:'Resetting password',data:{hasHash:!!window.location.hash,hashLength:window.location.hash.length},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'F'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:110',message:'Checking user session before reset',data:{hasUser:!!user,userId:user?.id?.substring(0,8),hasError:!!userError,errorMessage:userError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+
+      if (userError || !user) {
+        throw new Error("Invalid or expired reset link. Please request a new password reset.");
+      }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:118',message:'Updating password',data:{userId:user.id.substring(0,8)},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'G'})}).catch(()=>{});
       // #endregion
 
       const { error } = await supabase.auth.updateUser({
@@ -110,7 +131,7 @@ function ResetPasswordContent() {
       });
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:85',message:'Password update result',data:{hasError:!!error,errorMessage:error?.message,errorCode:error?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'G'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reset-password/page.tsx:124',message:'Password update result',data:{hasError:!!error,errorMessage:error?.message,errorCode:error?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'forgot-password',hypothesisId:'H'})}).catch(()=>{});
       // #endregion
 
       if (error) throw error;
