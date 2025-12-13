@@ -98,8 +98,13 @@ export async function POST(req: NextRequest) {
       ? `${Math.floor(callLog.duration_seconds / 60)}:${(callLog.duration_seconds % 60).toString().padStart(2, "0")}`
       : "N/A";
 
-    const leadName = callLog.leads?.name || "Unknown Lead";
-    const agentName = callLog.agents?.name || "Unassigned";
+    // Handle relationship queries - TypeScript infers arrays, but foreign keys return single objects
+    const callLogData: any = callLog;
+    const leadsData = callLogData?.leads;
+    const agentsData = callLogData?.agents;
+    
+    const leadName = (Array.isArray(leadsData) ? leadsData[0]?.name : leadsData?.name) || "Unknown Lead";
+    const agentName = (Array.isArray(agentsData) ? agentsData[0]?.name : agentsData?.name) || "Unassigned";
     const summary = callLog.summary || "No summary available.";
 
     // Build WhatsApp message
