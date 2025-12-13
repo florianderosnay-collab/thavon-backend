@@ -115,25 +115,13 @@ export async function POST(req: NextRequest) {
 
     // 4. Handle different event types
     switch (eventType) {
+      case "assistant-request":
+        // Return dynamic assistant configuration
+        return await handleAssistantRequest(payload);
+      
       case "end-of-call-report":
       case "call-status-update":
-        // #region agent log
-        try {
-          await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'route.ts:POST:handleCallUpdate',
-              message: 'Calling handleCallUpdate',
-              data: { eventType },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'webhook-receive',
-              hypothesisId: 'H3'
-            })
-          }).catch(() => {});
-        } catch {}
-        // #endregion
+      case "status-update":
         await handleCallUpdate(payload);
         break;
       
@@ -143,76 +131,33 @@ export async function POST(req: NextRequest) {
       
       case "speech-update":
       case "conversation-update":
-        // #region agent log
-        try {
-          await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'route.ts:POST:handleCallUpdate-speech',
-              message: 'Handling speech/conversation update as call update',
-              data: { eventType, hasCall: !!payload.call },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'webhook-receive',
-              hypothesisId: 'H2'
-            })
-          }).catch(() => {});
-        } catch {}
-        // #endregion
-        // Treat speech/conversation updates as call updates
+      case "assistant.started":
+        // Treat these as call updates (create/update call log)
         await handleCallUpdate(payload);
         break;
       
       default:
-        // #region agent log
-        try {
-          await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'route.ts:POST:unhandled',
-              message: 'Unhandled event type in frontend',
-              data: { eventType },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'webhook-receive',
-              hypothesisId: 'H2'
-            })
-          }).catch(() => {});
-        } catch {}
-        // #endregion
         console.log(`⚠️ Unhandled Vapi event type: ${eventType}`);
     }
 
     return NextResponse.json({ status: "ok" }, { status: 200 });
   } catch (error: any) {
-    // #region agent log
-    try {
-      await fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'route.ts:POST:error',
-          message: 'Exception in webhook handler',
-          data: {
-            errorType: error?.constructor?.name,
-            errorMessage: error?.message?.substring(0, 200),
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'webhook-receive',
-          hypothesisId: 'H3'
-        })
-      }).catch(() => {});
-    } catch {}
-    // #endregion
     console.error("❌ Vapi webhook error:", error);
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
     );
   }
+}
+
+/**
+ * Handle assistant-request events (if sent to frontend)
+ * Note: These are typically handled by Railway Server URL
+ */
+async function handleAssistantRequest(payload: any): Promise<NextResponse> {
+  // Just acknowledge - the real assistant-request handler is on Railway
+  console.log("ℹ️ Assistant request received (forwarding to Railway is preferred)");
+  return NextResponse.json({ status: "acknowledged" }, { status: 200 });
 }
 
 /**
