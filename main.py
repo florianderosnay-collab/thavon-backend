@@ -23,7 +23,8 @@ VAPI_PUBLIC_KEY = os.environ.get("VAPI_PUBLIC_KEY")  # Explicit public key (opti
 VAPI_Private_Key = VAPI_PUBLIC_KEY or VAPI_API_KEY  # Try public key first, fallback to VAPI_API_KEY
 
 # Define log path early for startup logging
-log_path = "/Users/florianrosnay/Desktop/thavon-complete/.cursor/debug.log"
+# Use environment variable if set (for Railway), otherwise use local path
+log_path = os.environ.get("DEBUG_LOG_PATH", "/Users/florianrosnay/Desktop/thavon-complete/.cursor/debug.log")
 
 # #region agent log - Environment variable check at startup
 try:
@@ -349,6 +350,7 @@ def trigger_vapi_call(payload):
         # Try each key type until one works
         last_error = None
         response = None
+        successful_key = None
         for key_name, key_value in keys_to_try:
             headers = { "Authorization": f"Bearer {key_value}", "Content-Type": "application/json" }
             
@@ -407,6 +409,7 @@ def trigger_vapi_call(payload):
                 
                 # If successful, break out of loop
                 if response.status_code in [200, 201]:
+                    successful_key = key_name
                     break
                     
                 # If 401 and we have more keys to try, continue
@@ -464,6 +467,33 @@ def trigger_vapi_call(payload):
                 else:
                     raise  # No more keys, raise exception
         
+        # Check if we have a response (if all keys failed with exceptions, response might be None)
+        if response is None:
+            # #region agent log
+            try:
+                with open(log_path, "a") as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "call-debug",
+                        "hypothesisId": "U",
+                        "location": "main.py:trigger_vapi_call:no_response",
+                        "message": "No response after trying all keys",
+                        "data": {
+                            "keys_tried": [k[0] for k in keys_to_try],
+                            "last_error_type": type(last_error).__name__ if last_error else "none",
+                            "last_error_message": str(last_error)[:500] if last_error else "none",
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except:
+                pass
+            # #endregion
+            print("❌ Vapi API call failed: No response after trying all keys")
+            if last_error:
+                print(f"   -> Last error: {last_error}")
+            return False
+        
         # #region agent log
         try:
             response_text = response.text if response.text else "empty"
@@ -492,6 +522,8 @@ def trigger_vapi_call(payload):
                         "is_403": response.status_code == 403,
                         "error_message": response_json.get("message", "") if isinstance(response_json, dict) else "",
                         "error_type": response_json.get("error", "") if isinstance(response_json, dict) else "",
+                        "successful_key": successful_key,
+                        "keys_tried": [k[0] for k in keys_to_try],
                     },
                     "timestamp": int(time.time() * 1000)
                 }
@@ -514,14 +546,39 @@ def trigger_vapi_call(payload):
         # #endregion
         
         print(f"   -> Vapi API Response: {response.status_code}")
+        if successful_key:
+            print(f"   -> ✅ Successful key: {successful_key}")
         
         if response.status_code in [200, 201]:
             response_data = response.json() if response.text else {}
-            print(f"   -> ✅ Call initiated: {response_data.get('id', 'unknown')}")
+            call_id = response_data.get('id', 'unknown')
+            print(f"   -> ✅ Call initiated: {call_id}")
+            # #region agent log
+            try:
+                with open(log_path, "a") as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "call-debug",
+                        "hypothesisId": "SUCCESS",
+                        "location": "main.py:trigger_vapi_call:success",
+                        "message": "Vapi call successfully initiated",
+                        "data": {
+                            "call_id": call_id,
+                            "successful_key": successful_key,
+                            "status_code": response.status_code,
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except:
+                pass
+            # #endregion
             return True
         else:
             error_msg = response.text[:500] if response.text else "No error message"
             print(f"   -> ❌ Vapi API Error: {response.status_code} - {error_msg}")
+            if not successful_key:
+                print(f"   -> ⚠️ All keys failed. Keys tried: {[k[0] for k in keys_to_try]}")
             
             # #region agent log
             try:

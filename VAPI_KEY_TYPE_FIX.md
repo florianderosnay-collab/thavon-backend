@@ -24,7 +24,7 @@ The code now **automatically tries both key types** if available:
 1. Go to Railway → Your Backend Service → Variables
 2. Set **both** environment variables:
    - `VAPI_PUBLIC_KEY` = Your Vapi **Public Key** (for API calls)
-   - `VAPI_API_KEY` = Your Vapi **Private Key** (for account management, optional)
+   -` = Your Vapi **Private Key** (for account management, optional)
 
 The code will automatically try the public key first, which should work for API calls.
 
