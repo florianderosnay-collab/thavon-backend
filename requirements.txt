@@ -6,3 +6,4 @@ python-dotenv
 openai
 requests
 twilio
+backports.zoneinfo;python_version<"3.9"

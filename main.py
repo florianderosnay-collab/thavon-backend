@@ -7,6 +7,11 @@ from supabase import create_client, Client
 import json
 import os
 import time # For mocking delay
+from datetime import datetime
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except ImportError:
+    from backports.zoneinfo import ZoneInfo  # Fallback for older Python
 
 # --- ENVIRONMENT VARIABLES (Ensure these are set on Railway) ---
 # NOTE: VAPI_Private_Key is your API Key from Vapi, not the Vapi Number ID.
@@ -119,6 +124,41 @@ app.add_middleware(
 # --- DATA MODELS ---
 class CampaignRequest(BaseModel):
     agency_id: str
+
+# --- OFFICE HOURS HELPERS ---
+
+def get_agency_timezone(agency_id: str) -> str:
+    """
+    Fetches the agency's timezone from the database.
+    Defaults to 'Europe/Luxembourg' if not set.
+    """
+    try:
+        response = supabase.table('agencies').select('timezone').eq('id', agency_id).single().execute()
+        timezone = response.data.get('timezone') if response.data else None
+        return timezone or 'Europe/Luxembourg'  # Default timezone
+    except Exception as e:
+        print(f"Error fetching agency timezone: {e}, defaulting to Europe/Luxembourg")
+        return 'Europe/Luxembourg'
+
+def is_within_office_hours(agency_id: str) -> bool:
+    """
+    Checks if the current time is within office hours (8:00 AM - 9:00 PM)
+    based on the agency's timezone.
+    """
+    try:
+        timezone_str = get_agency_timezone(agency_id)
+        tz = ZoneInfo(timezone_str)
+        now = datetime.now(tz)
+        current_hour = now.hour
+        
+        # Office hours: 8:00 AM (8) to 9:00 PM (21)
+        is_office_hours = 8 <= current_hour < 21
+        
+        print(f"⏰ Office Hours Check for Agency {agency_id}: {now.strftime('%Y-%m-%d %H:%M:%S %Z')} - {'✅ OPEN' if is_office_hours else '❌ CLOSED'}")
+        return is_office_hours
+    except Exception as e:
+        print(f"Error checking office hours: {e}, defaulting to True (allow call)")
+        return True  # Default to allowing calls if timezone check fails
 
 # --- FULFILLMENT HELPERS (NEW LOGIC) ---
 
@@ -252,18 +292,26 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
         print("❌ Call blocked: Inactive subscription")
         return {"status": "error", "message": "Subscription inactive"}
 
-    # 3. Save Lead to Database (Mark as 'called' immediately or 'inbound')
+    # 3. Check Office Hours
+    is_office_hours = is_within_office_hours(agency_id)
+    
+    # 4. Save Lead to Database with appropriate status
+    lead_status = "calling_inbound" if is_office_hours else "queued_night"
     lead_data = {
         "agency_id": agency_id,
         "name": name,
         "phone_number": str(phone),
         "address": address,
-        "status": "calling_inbound", 
+        "status": lead_status,
         "asking_price": "0" # Not relevant for inbound usually
     }
     supabase.table('leads').insert(lead_data).execute()
 
-    # 4. TRIGGER THE CALL (Immediate)
+    # 5. TRIGGER THE CALL (Only if within office hours)
+    if not is_office_hours:
+        print(f"🌙 Outside office hours - Lead {name} queued for next business day")
+        return {"status": "queued", "lead": name, "message": "Lead saved and queued for next business day"}
+
     # We use a DIFFERENT script for inbound.
     inbound_prompt = f"""
     # IDENTITY
@@ -301,36 +349,51 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
         }
     }
 
-    # Execute Call (in background so we reply to Zapier instantly)
-    background_tasks.add_task(trigger_vapi_call, call_payload)
+    # 6. Execute Call (in background so we reply to Zapier instantly)
+    # Add a 30-second delay before calling (as per requirements)
+    def delayed_call():
+        time.sleep(30)  # Wait 30 seconds before calling
+        trigger_vapi_call(call_payload)
+    
+    background_tasks.add_task(delayed_call)
 
-    return {"status": "calling", "lead": name}
-
-def trigger_vapi_call(payload):
-    try:
-        headers = { "Authorization": f"Bearer {VAPI_Private_Key}", "Content-Type": "application/json" }
-        requests.post("https://api.vapi.ai/call/phone", headers=headers, json=payload)
-    except Exception as e:
-        print(f"Vapi Call Failed: {e}")
+    return {"status": "calling", "lead": name, "message": "Call will be initiated in 30 seconds"}
 
 @app.post("/start-campaign")
 async def start_campaign(request: CampaignRequest, background_tasks: BackgroundTasks):
     """
     Fetches leads ONLY for the specific agency requesting the campaign.
+    Prioritizes queued_night leads (from outside office hours) before new leads.
     """
     agency_id = request.agency_id
     
-    # 1. Get Leads (Filtered by Agency ID)
-    response = supabase.table('leads').select("*").eq('status', 'new').eq('agency_id', agency_id).limit(5).execute() # Limit to 5 for fast demo
-    leads = response.data
+    # 1. Get Queued Night Leads First (Priority - from outside office hours)
+    queued_response = supabase.table('leads').select("*").eq('status', 'queued_night').eq('agency_id', agency_id).limit(5).execute()
+    queued_leads = queued_response.data or []
+    
+    # 2. Get New Leads (if we haven't reached the limit)
+    remaining_slots = 5 - len(queued_leads)
+    new_leads = []
+    if remaining_slots > 0:
+        new_response = supabase.table('leads').select("*").eq('status', 'new').eq('agency_id', agency_id).limit(remaining_slots).execute()
+        new_leads = new_response.data or []
+    
+    # 3. Combine leads (queued_night first, then new)
+    leads = queued_leads + new_leads
     
     if not leads:
-        return {"message": "No new leads found for your agency."}
+        return {"message": "No leads found for your agency."}
     
-    # 2. Loop and Call in the background
+    # 4. Update queued_night leads to 'new' status so they're processed
+    if queued_leads:
+        lead_ids = [lead['id'] for lead in queued_leads]
+        supabase.table('leads').update({'status': 'new'}).in_('id', lead_ids).execute()
+        print(f"📞 Processing {len(queued_leads)} queued night leads + {len(new_leads)} new leads")
+    
+    # 5. Loop and Call in the background
     background_tasks.add_task(process_outbound_calls, leads)
     
-    return {"message": f"Started calling {len(leads)} leads."}
+    return {"message": f"Started calling {len(leads)} leads ({len(queued_leads)} queued + {len(new_leads)} new)."}
 
 # Add a simple health check endpoint
 @app.get("/")
