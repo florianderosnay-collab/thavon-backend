@@ -310,10 +310,11 @@ async function handleCallUpdate(payload: any) {
   }
 
   // Extract call data
-  const transcript = call.transcript || call.recording?.transcript || "";
-  const summary = call.summary || call.recording?.summary || "";
-  const recordingUrl = call.recording?.url || call.recordingUrl || "";
-  const duration = call.duration || call.recording?.duration || 0;
+  // For end-of-call-report, data is in message.* not call.recording.*
+  const transcript = message.transcript || call.transcript || call.recording?.transcript || "";
+  const summary = message.summary || call.summary || call.recording?.summary || "";
+  const recordingUrl = message.recordingUrl || message.stereoRecordingUrl || call.recording?.url || call.recordingUrl || "";
+  const duration = message.durationSeconds || call.duration || call.recording?.duration || 0;
   const language = call.language || metadata.language || "en";
 
   // Determine call status
@@ -432,6 +433,9 @@ async function handleCallUpdate(payload: any) {
     agencyId,
     hasRecording: !!recordingUrl,
     hasTranscript: !!transcript,
+    recordingUrl: recordingUrl || "NONE",
+    transcriptLength: transcript?.length || 0,
+    duration,
   });
 
   console.log(`✅ Call log saved: ${callLog.id}`);
