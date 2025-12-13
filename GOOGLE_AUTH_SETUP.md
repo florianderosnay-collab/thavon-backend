@@ -40,14 +40,30 @@ NEXT_PUBLIC_BASE_URL=https://thavon.vercel.app
    - Client ID
    - Client Secret
 
-### Step 4: Verify Google Cloud Console
+### Step 4: Configure Google Cloud Console OAuth Consent Screen
 
 1. Go to https://console.cloud.google.com
-2. Navigate to **APIs & Services** → **Credentials**
-3. Find your OAuth 2.0 Client ID
-4. Under **Authorized redirect URIs**, make sure you have:
-   - `https://[your-supabase-project].supabase.co/auth/v1/callback`
-   - This is the Supabase callback URL, not your app URL
+2. Navigate to **APIs & Services** → **OAuth consent screen**
+3. Configure the following:
+
+   **Application Information:**
+   - **App name**: `Thavon` (or your preferred name)
+   - **User support email**: Your support email
+   - **Application home page**: `https://thavon.io`
+   - **Privacy policy link**: `https://thavon.io/privacy` (if you have one)
+   - **Terms of service link**: `https://thavon.io/terms` (if you have one)
+
+   **Authorized domains:**
+   - Click **+ Add Domain**
+   - Add: `thavon.io`
+   - This will make "to continue to thavon.io" appear instead of the Supabase URL
+
+4. **Verify OAuth 2.0 Client:**
+   - Go to **APIs & Services** → **Credentials**
+   - Find your OAuth 2.0 Client ID
+   - Under **Authorized redirect URIs**, make sure you have:
+     - `https://[your-supabase-project].supabase.co/auth/v1/callback`
+     - This is the Supabase callback URL, not your app URL
 
 ## How It Works
 
