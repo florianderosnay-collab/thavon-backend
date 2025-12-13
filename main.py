@@ -721,7 +721,7 @@ def process_outbound_calls(leads: list):
                     "data": {
                         "has_phone_number_id": phone_number_id is not None,
                         "phone_number_id_length": len(phone_number_id) if phone_number_id else 0,
-                        "payload_keys": list(["phoneNumberId", "customer", "assistant", "metadata", "webhookUrl"]),
+                        "payload_keys": list(["phoneNumberId", "customer", "assistant"]),  # Removed metadata and webhookUrl (causes 400)
                         "webhook_url": f"{os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')}/api/webhooks/vapi",
                     },
                     "timestamp": int(time.time() * 1000)
@@ -754,16 +754,10 @@ def process_outbound_calls(leads: list):
             }
         }
         
-        # Only add optional fields if they exist in env
-        if os.environ.get('NEXT_PUBLIC_BASE_URL'):
-            vapi_payload["webhookUrl"] = f"{os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')}/api/webhooks/vapi"
-        
-        # Add metadata only if needed
-        vapi_payload["metadata"] = {
-            "agency_id": agency_id,
-            "lead_id": lead.get('id'),
-            "is_outbound": True
-        }
+        # NOTE: webhookUrl causes 400 error - "property webhookUrl should not exist"
+        # webhookUrl must be configured in Vapi dashboard settings, not in the payload
+        # metadata is optional and may also cause issues - removing for now
+        # vapi_payload["metadata"] = {...}  # Removed to avoid potential issues
         
         # 2. TRIGGER THE CALL
         call_success = trigger_vapi_call(vapi_payload)
@@ -951,13 +945,9 @@ async def handle_inbound_lead(agency_id: str, request: Request, background_tasks
                 "model": "sonic-english"  # Match old working code structure
             }
         },
-        "metadata": {
-            "agency_id": agency_id,
-            "lead_id": lead_id,
-            "language": language,
-            "is_inbound": True
-        },
-        "webhookUrl": f"{os.environ.get('NEXT_PUBLIC_BASE_URL', 'https://app.thavon.io')}/api/webhooks/vapi"  # NEW: Webhook URL for call data
+        # NOTE: webhookUrl and metadata removed - webhookUrl causes 400 error
+        # webhookUrl must be configured in Vapi dashboard settings instead
+        # metadata may also cause issues, so removed for minimal payload
     }
 
     # 6. Execute Call (in background so we reply to Zapier instantly)
