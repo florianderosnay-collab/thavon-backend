@@ -634,6 +634,21 @@ async function handleFunctionCall(payload: any) {
           callId: null, // Will be linked when call completes
         });
 
+        // Update lead status to "appointment_booked"
+        const { error: leadUpdateError } = await supabaseAdmin
+          .from("leads")
+          .update({ 
+            status: "appointment_booked",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", leadId);
+
+        if (leadUpdateError) {
+          console.error("❌ Error updating lead status to appointment_booked:", leadUpdateError);
+        } else {
+          console.log(`✅ Lead ${leadId} status updated to: appointment_booked`);
+        }
+
         // Create calendar event if agent has calendar sync
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
         fetch(`${baseUrl}/api/calendar/create-event`, {
