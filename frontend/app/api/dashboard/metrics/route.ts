@@ -92,8 +92,9 @@ export async function GET(req: Request) {
       .eq("agency_id", agencyId)
       .in("status", callStatuses);
     
-    // Use whichever is higher (in case some calls aren't reflected in lead status yet)
-    const totalCalls = Math.max(callsAttempted || 0, leadsWithCalls || 0);
+    // Use call_logs count as primary source (most accurate)
+    // Fallback to leads status count if call_logs is empty (for backwards compatibility)
+    const totalCallsAttempted = callsAttempted || leadsWithCalls || 0;
 
     // Calculate connection rate (leads with appointments or successful calls / total calls)
     const { count: successfulCalls } = await supabaseAdmin
@@ -102,8 +103,8 @@ export async function GET(req: Request) {
       .eq("agency_id", agencyId)
       .in("status", ['appointment_booked', 'called']);
 
-    const connectionRate = callsAttempted && callsAttempted > 0
-      ? Math.round(((successfulCalls || 0) / callsAttempted) * 100)
+    const connectionRate = totalCallsAttempted > 0
+      ? Math.round(((successfulCalls || 0) / totalCallsAttempted) * 100)
       : 0;
 
     // 3. APPOINTMENTS: Count from appointments table (more accurate)
