@@ -319,22 +319,89 @@ async function handleCallUpdate(payload: any) {
   const duration = Math.round(Number(durationRaw)) || 0;
   const language = call.language || metadata.language || "en";
 
-  // Determine call status
-  // Normalize status to lowercase for comparison
-  const normalizedStatus = (status || "").toLowerCase().trim();
-  
-  let callStatus: string = "completed";
-  if (normalizedStatus === "no-answer" || normalizedStatus === "no_answer" || normalizedStatus === "noanswer") {
-    callStatus = "no_answer";
-  } else if (normalizedStatus === "busy") {
-    callStatus = "busy";
-  } else if (normalizedStatus === "failed" || normalizedStatus === "error") {
-    callStatus = "failed";
-  } else if (normalizedStatus === "cancelled" || normalizedStatus === "canceled" || normalizedStatus === "cancel") {
-    callStatus = "cancelled";
-  } else if (normalizedStatus === "ended" || normalizedStatus === "completed") {
-    callStatus = "completed";
+  // Comprehensive status mapping function
+  // Maps all possible Vapi status variations to our standardized call_logs status
+  function mapVapiStatusToCallStatus(vapiStatus: string): string {
+    const normalized = (vapiStatus || "").toLowerCase().trim();
+    
+    // Map all possible variations to standardized statuses
+    const statusMap: Record<string, string> = {
+      // Completed/Ended variations
+      "completed": "completed",
+      "ended": "completed",
+      "done": "completed",
+      "finished": "completed",
+      "success": "completed",
+      "successful": "completed",
+      
+      // No Answer variations
+      "no-answer": "no_answer",
+      "no_answer": "no_answer",
+      "noanswer": "no_answer",
+      "no-answer-received": "no_answer",
+      "not-answered": "no_answer",
+      "not_answered": "no_answer",
+      "unanswered": "no_answer",
+      "ringing": "no_answer", // If call rings but never answers
+      
+      // Busy variations
+      "busy": "busy",
+      "busy-signal": "busy",
+      "busy_signal": "busy",
+      "line-busy": "busy",
+      "line_busy": "busy",
+      "engaged": "busy",
+      
+      // Failed/Error variations
+      "failed": "failed",
+      "error": "failed",
+      "failure": "failed",
+      "unsuccessful": "failed",
+      "disconnected": "failed",
+      "dropped": "failed",
+      "network-error": "failed",
+      "network_error": "failed",
+      
+      // Cancelled variations
+      "cancelled": "cancelled",
+      "canceled": "cancelled",
+      "cancel": "cancelled",
+      "cancelled-by-user": "cancelled",
+      "cancelled_by_user": "cancelled",
+      "user-cancelled": "cancelled",
+      "user_cancelled": "cancelled",
+      "aborted": "cancelled",
+      "terminated": "cancelled",
+    };
+    
+    // Check exact match first
+    if (statusMap[normalized]) {
+      return statusMap[normalized];
+    }
+    
+    // Check partial matches for compound statuses
+    if (normalized.includes("no-answer") || normalized.includes("no_answer") || normalized.includes("unanswered")) {
+      return "no_answer";
+    }
+    if (normalized.includes("busy") || normalized.includes("engaged")) {
+      return "busy";
+    }
+    if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("disconnect")) {
+      return "failed";
+    }
+    if (normalized.includes("cancel") || normalized.includes("abort") || normalized.includes("terminate")) {
+      return "cancelled";
+    }
+    if (normalized.includes("complete") || normalized.includes("end") || normalized.includes("done") || normalized.includes("success")) {
+      return "completed";
+    }
+    
+    // Default to completed for unknown statuses (assume success)
+    return "completed";
   }
+
+  // Determine call status using comprehensive mapping
+  const callStatus = mapVapiStatusToCallStatus(status);
 
   // #region agent log
   fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
@@ -445,21 +512,29 @@ async function handleCallUpdate(payload: any) {
   console.log(`✅ Call log saved: ${callLog.id}`);
 
   // Update lead status based on call outcome
+  // Comprehensive mapping from call_logs status to lead status
   if (leadId) {
     let leadStatus: string | null = null;
     
-    if (callStatus === "completed") {
-      leadStatus = "called";
-    } else if (callStatus === "no_answer") {
-      leadStatus = "no_answer";
-    } else if (callStatus === "busy") {
-      leadStatus = "callback"; // Mark for callback
-    } else if (callStatus === "cancelled") {
-      // Don't update status for cancelled calls
-      leadStatus = null;
-    } else if (callStatus === "failed") {
-      // Don't update status for failed calls, keep as is
-      leadStatus = null;
+    // Map call status to lead status
+    const callToLeadStatusMap: Record<string, string | null> = {
+      "completed": "called",           // Successful call → "called"
+      "no_answer": "no_answer",       // No answer → "no_answer"
+      "busy": "callback",              // Busy → "callback" (needs callback)
+      "failed": null,                 // Failed → keep current status (don't update)
+      "cancelled": null,               // Cancelled → keep current status (don't update)
+    };
+    
+    leadStatus = callToLeadStatusMap[callStatus] ?? null;
+    
+    // Special case: Check if call has voicemail indicator in transcript or summary
+    // If transcript/summary mentions voicemail, update to "voicemail" status
+    if (callStatus === "completed" && (transcript || summary)) {
+      const voicemailKeywords = ["voicemail", "voice mail", "voice-mail", "left a message", "left message"];
+      const textToCheck = `${transcript || ""} ${summary || ""}`.toLowerCase();
+      if (voicemailKeywords.some(keyword => textToCheck.includes(keyword))) {
+        leadStatus = "voicemail";
+      }
     }
 
     if (leadStatus) {
