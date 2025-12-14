@@ -412,7 +412,7 @@ async function handleCallUpdate(payload: any) {
       message: 'Status mapping result',
       data: {
         rawStatus: status,
-        normalizedStatus: normalizedStatus,
+        normalizedStatus: (status || "").toLowerCase().trim(),
         mappedStatus: callStatus,
         callId: callId,
       },
