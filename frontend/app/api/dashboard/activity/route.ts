@@ -183,13 +183,14 @@ export async function GET(req: Request) {
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
-    return NextResponse.json({ activities: allActivities });
-  } catch (error: any) {
-    console.error("Activity fetch error:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
+           console.log("✅ Dashboard activity:", { count: allActivities.length, activities: allActivities.slice(0, 3) });
+           return NextResponse.json({ activities: allActivities });
+         } catch (error: any) {
+           console.error("❌ Activity fetch error:", error);
+           return NextResponse.json(
+             { error: error.message || "Internal server error" },
+             { status: 500 }
+           );
+         }
+       }
 

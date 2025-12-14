@@ -52,21 +52,21 @@ export async function GET(req: Request) {
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-    // 1. TOTAL LEADS: Count all leads for this agency
-    const { count: totalLeads, error: leadsError } = await supabase
+    // 1. TOTAL LEADS: Count all leads for this agency (use admin to bypass RLS)
+    const { count: totalLeads, error: leadsError } = await supabaseAdmin
       .from("leads")
       .select("*", { count: "exact", head: true })
       .eq("agency_id", agencyId);
 
     // Leads from this week
-    const { count: leadsThisWeek } = await supabase
+    const { count: leadsThisWeek } = await supabaseAdmin
       .from("leads")
       .select("*", { count: "exact", head: true })
       .eq("agency_id", agencyId)
       .gte("created_at", oneWeekAgo.toISOString());
 
     // Leads from last week (for comparison)
-    const { count: leadsLastWeek } = await supabase
+    const { count: leadsLastWeek } = await supabaseAdmin
       .from("leads")
       .select("*", { count: "exact", head: true })
       .eq("agency_id", agencyId)
