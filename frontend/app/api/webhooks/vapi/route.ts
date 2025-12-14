@@ -444,6 +444,61 @@ async function handleCallUpdate(payload: any) {
 
   console.log(`✅ Call log saved: ${callLog.id}`);
 
+  // Update lead status based on call outcome
+  if (leadId) {
+    let leadStatus: string | null = null;
+    
+    if (callStatus === "completed") {
+      leadStatus = "called";
+    } else if (callStatus === "no_answer") {
+      leadStatus = "no_answer";
+    } else if (callStatus === "busy") {
+      leadStatus = "callback"; // Mark for callback
+    } else if (callStatus === "cancelled") {
+      // Don't update status for cancelled calls
+      leadStatus = null;
+    } else if (callStatus === "failed") {
+      // Don't update status for failed calls, keep as is
+      leadStatus = null;
+    }
+
+    if (leadStatus) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'route.ts:handleCallUpdate:update-lead-status',
+          message: 'Updating lead status',
+          data: {
+            leadId: leadId,
+            callStatus: callStatus,
+            newLeadStatus: leadStatus,
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          runId: 'webhook-process',
+          hypothesisId: 'H6'
+        })
+      }).catch(() => {});
+      // #endregion
+
+      const { error: leadUpdateError } = await supabaseAdmin
+        .from("leads")
+        .update({ 
+          status: leadStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", leadId);
+
+      if (leadUpdateError) {
+        console.error("❌ Error updating lead status:", leadUpdateError);
+      } else {
+        console.log(`✅ Lead ${leadId} status updated to: ${leadStatus}`);
+      }
+    }
+  }
+
   // If call was unanswered, create retry entry
   if (callStatus === "no_answer" && leadId) {
     await createCallRetry(callLog.id, leadId, agencyId);
