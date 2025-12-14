@@ -182,7 +182,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       totalLeads: totalLeads || 0,
       leadsChange: leadsChange,
-      callsAttempted: callsAttempted || 0,
+      callsAttempted: totalCallsAttempted,
       connectionRate: connectionRate,
       appointments: appointments || 0,
       nextAppointment: nextAppointmentText,
