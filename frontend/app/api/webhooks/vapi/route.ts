@@ -459,6 +459,27 @@ async function handleCallUpdate(payload: any) {
  * Handle function calls (e.g., bookAppointment)
  */
 async function handleFunctionCall(payload: any) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'route.ts:handleFunctionCall:entry',
+      message: 'Function call received',
+      data: {
+        payloadKeys: Object.keys(payload),
+        hasFunctionCall: !!payload.functionCall,
+        functionName: payload.functionCall?.name || payload.function_name,
+        hasCall: !!payload.call,
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'webhook-process',
+      hypothesisId: 'H5'
+    })
+  }).catch(() => {});
+  // #endregion
+
   const call = payload.call || payload;
   const functionName = payload.functionCall?.name || payload.function_name;
   const functionArgs = payload.functionCall?.parameters || payload.function_args || {};
@@ -467,6 +488,30 @@ async function handleFunctionCall(payload: any) {
   const agencyId = metadata.agency_id || metadata.agencyId;
   const leadId = metadata.lead_id || metadata.leadId;
   const agentId = metadata.agent_id || metadata.agentId;
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'route.ts:handleFunctionCall:extracted',
+      message: 'Extracted function call data',
+      data: {
+        functionName: functionName,
+        functionArgs: functionArgs,
+        agencyId: agencyId,
+        leadId: leadId,
+        agentId: agentId,
+        hasScheduledAt: !!(functionArgs.time || functionArgs.scheduled_at),
+        scheduledAt: functionArgs.time || functionArgs.scheduled_at,
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'webhook-process',
+      hypothesisId: 'H5'
+    })
+  }).catch(() => {});
+  // #endregion
 
   if (functionName === "bookAppointment" && agencyId && leadId) {
     // Extract appointment details
@@ -503,6 +548,28 @@ async function handleFunctionCall(payload: any) {
       }
 
       if (assignedAgentId) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'route.ts:handleFunctionCall:before-create',
+            message: 'About to create appointment',
+            data: {
+              agencyId: agencyId,
+              leadId: leadId,
+              agentId: assignedAgentId,
+              scheduledAt: scheduledAt,
+              notes: notes,
+            },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            runId: 'webhook-process',
+            hypothesisId: 'H5'
+          })
+        }).catch(() => {});
+        // #endregion
+
         await createAppointment({
           agencyId,
           leadId,
@@ -525,8 +592,73 @@ async function handleFunctionCall(payload: any) {
             title: `Appointment with ${leadName}`,
           }),
         }).catch((err) => console.error("Failed to create calendar event:", err));
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'route.ts:handleFunctionCall:no-agent',
+            message: 'No agent assigned, cannot create appointment',
+            data: {
+              agencyId: agencyId,
+              leadId: leadId,
+              agentId: agentId,
+            },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            runId: 'webhook-process',
+            hypothesisId: 'H5'
+          })
+        }).catch(() => {});
+        // #endregion
+        console.error("❌ Cannot create appointment: No agent assigned");
       }
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'route.ts:handleFunctionCall:no-scheduledAt',
+          message: 'No scheduledAt time provided',
+          data: {
+            functionArgs: functionArgs,
+            scheduledAt: functionArgs.time || functionArgs.scheduled_at,
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          runId: 'webhook-process',
+          hypothesisId: 'H5'
+        })
+      }).catch(() => {});
+      // #endregion
+      console.error("❌ Cannot create appointment: No scheduledAt time provided");
     }
+  } else {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'route.ts:handleFunctionCall:conditions-not-met',
+        message: 'bookAppointment conditions not met',
+        data: {
+          functionName: functionName,
+          agencyId: agencyId,
+          leadId: leadId,
+          isBookAppointment: functionName === "bookAppointment",
+          hasAgencyId: !!agencyId,
+          hasLeadId: !!leadId,
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        runId: 'webhook-process',
+        hypothesisId: 'H5'
+      })
+    }).catch(() => {});
+    // #endregion
+    console.log(`⚠️ Function call ${functionName} - conditions not met or not bookAppointment`);
   }
 }
 
@@ -581,7 +713,30 @@ async function createAppointment(data: {
   notes: string;
   callId: string | null;
 }) {
-  const { error } = await supabaseAdmin.from("appointments").insert({
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'route.ts:createAppointment:before-insert',
+      message: 'About to insert appointment',
+      data: {
+        agencyId: data.agencyId,
+        leadId: data.leadId,
+        agentId: data.agentId,
+        scheduledAt: data.scheduledAt,
+        notes: data.notes,
+        callId: data.callId,
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'webhook-process',
+      hypothesisId: 'H5'
+    })
+  }).catch(() => {});
+  // #endregion
+
+  const { data: appointment, error } = await supabaseAdmin.from("appointments").insert({
     agency_id: data.agencyId,
     lead_id: data.leadId,
     agent_id: data.agentId,
@@ -589,12 +744,33 @@ async function createAppointment(data: {
     scheduled_at: data.scheduledAt,
     notes: data.notes,
     status: "scheduled",
-  });
+  }).select().single();
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'route.ts:createAppointment:after-insert',
+      message: 'Appointment insert result',
+      data: {
+        hasError: !!error,
+        errorMessage: error?.message,
+        errorCode: error?.code,
+        appointmentId: appointment?.id,
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'webhook-process',
+      hypothesisId: 'H5'
+    })
+  }).catch(() => {});
+  // #endregion
 
   if (error) {
     console.error("❌ Error creating appointment:", error);
   } else {
-    console.log(`✅ Appointment created for lead ${data.leadId}`);
+    console.log(`✅ Appointment created: ${appointment?.id} for lead ${data.leadId}`);
   }
 }
 
