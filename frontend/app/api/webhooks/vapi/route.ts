@@ -320,22 +320,49 @@ async function handleCallUpdate(payload: any) {
   const language = call.language || metadata.language || "en";
 
   // Determine call status
+  // Normalize status to lowercase for comparison
+  const normalizedStatus = (status || "").toLowerCase().trim();
+  
   let callStatus: string = "completed";
-  if (status === "no-answer" || status === "no_answer") {
+  if (normalizedStatus === "no-answer" || normalizedStatus === "no_answer" || normalizedStatus === "noanswer") {
     callStatus = "no_answer";
-  } else if (status === "busy") {
+  } else if (normalizedStatus === "busy") {
     callStatus = "busy";
-  } else if (status === "failed" || status === "error") {
+  } else if (normalizedStatus === "failed" || normalizedStatus === "error") {
     callStatus = "failed";
-  } else if (status === "cancelled") {
+  } else if (normalizedStatus === "cancelled" || normalizedStatus === "canceled" || normalizedStatus === "cancel") {
     callStatus = "cancelled";
+  } else if (normalizedStatus === "ended" || normalizedStatus === "completed") {
+    callStatus = "completed";
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/da82e913-c8ed-438b-b73c-47e584596160', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'route.ts:handleCallUpdate:status-mapping',
+      message: 'Status mapping result',
+      data: {
+        rawStatus: status,
+        normalizedStatus: normalizedStatus,
+        mappedStatus: callStatus,
+        callId: callId,
+      },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'webhook-process',
+      hypothesisId: 'H4'
+    })
+  }).catch(() => {});
+  // #endregion
 
   console.log("✅ Processing call update", {
     callId,
     agencyId,
     leadId,
-    status: callStatus,
+    rawStatus: status,
+    mappedStatus: callStatus,
     hasRecording: !!recordingUrl,
     hasTranscript: !!transcript,
   });
